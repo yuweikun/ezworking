@@ -4,7 +4,7 @@ Write-Host "Creating test user..." -ForegroundColor Green
 try {
     # Try to register the test user
     Write-Host "`nStep 1: Register test user" -ForegroundColor Yellow
-    $registerResponse = Invoke-WebRequest -Uri "http://localhost:3000/api/auth/register" -Method POST -Headers @{"Content-Type"="application/json"} -Body '{"email":"test@example.com","password":"123456"}' -UseBasicParsing
+    $registerResponse = Invoke-WebRequest -Uri "http://localhost:3001/api/auth/register" -Method POST -Headers @{"Content-Type"="application/json"} -Body '{"email":"test@example.com","password":"testpassword123"}' -UseBasicParsing
     Write-Host "Register Status: $($registerResponse.StatusCode)" -ForegroundColor Green
     Write-Host "Register Response: $($registerResponse.Content)" -ForegroundColor Cyan
     
@@ -25,7 +25,7 @@ try {
             
             # Test sessions API
             Write-Host "`nStep 3: Test sessions API" -ForegroundColor Yellow
-            $sessionResponse = Invoke-WebRequest -Uri "http://localhost:3000/api/sessions" -Method GET -Headers @{"Authorization"="Bearer $token"} -UseBasicParsing
+            $sessionResponse = Invoke-WebRequest -Uri "http://localhost:3001/api/sessions" -Method GET -Headers @{"Authorization"="Bearer $token"} -UseBasicParsing
             Write-Host "Sessions Status: $($sessionResponse.StatusCode)" -ForegroundColor Green
             Write-Host "Sessions Response: $($sessionResponse.Content)" -ForegroundColor Cyan
         }
@@ -43,7 +43,7 @@ try {
         if ($statusCode -eq 409 -or $responseBody -like "*already*") {
             Write-Host "`nUser might already exist, trying to login..." -ForegroundColor Yellow
             try {
-                $loginResponse = Invoke-WebRequest -Uri "http://localhost:3000/api/auth/login" -Method POST -Headers @{"Content-Type"="application/json"} -Body '{"email":"test@example.com","password":"123456"}' -UseBasicParsing
+                $loginResponse = Invoke-WebRequest -Uri "http://localhost:3001/api/auth/login" -Method POST -Headers @{"Content-Type"="application/json"} -Body '{"email":"test@example.com","password":"testpassword123"}' -UseBasicParsing
                 Write-Host "Login Status: $($loginResponse.StatusCode)" -ForegroundColor Green
                 Write-Host "Login Response: $($loginResponse.Content)" -ForegroundColor Cyan
             } catch {
