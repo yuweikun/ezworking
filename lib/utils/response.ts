@@ -253,6 +253,54 @@ export function handleApiError(error: any, context?: string): NextResponse {
   }
 
   // Supabase Auth 错误处理
+  if (error.__isAuthError || error.name === 'AuthApiError') {
+    switch (error.code) {
+      case 'invalid_credentials':
+        return createErrorResponse(
+          "INVALID_CREDENTIALS",
+          "邮箱或密码错误",
+          401,
+          errorDetails
+        );
+      case 'email_not_confirmed':
+        return createErrorResponse(
+          "EMAIL_NOT_CONFIRMED",
+          "邮箱尚未验证，请检查您的邮箱",
+          401,
+          errorDetails
+        );
+      case 'user_not_found':
+        return createErrorResponse(
+          "INVALID_CREDENTIALS",
+          "邮箱或密码错误",
+          401,
+          errorDetails
+        );
+      case 'weak_password':
+        return createErrorResponse(
+          "VALIDATION_ERROR",
+          "密码强度不足",
+          400,
+          errorDetails
+        );
+      case 'signup_disabled':
+        return createErrorResponse(
+          "SERVICE_UNAVAILABLE",
+          "注册功能暂时关闭",
+          503,
+          errorDetails
+        );
+      default:
+        return createErrorResponse(
+          "AUTH_ERROR",
+          error.message || "认证错误",
+          error.status || 400,
+          errorDetails
+        );
+    }
+  }
+
+  // 通用消息检查（作为后备）
   if (error.message) {
     if (error.message.includes("Invalid login credentials")) {
       return createErrorResponse(
