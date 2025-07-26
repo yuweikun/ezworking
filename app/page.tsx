@@ -45,6 +45,7 @@ import { useConversationRealtime } from "../hooks/use-conversation-realtime";
 import { ErrorHandler } from "../lib/error-handler";
 import { ErrorBoundary } from "../components/error-boundary";
 import { CustomMessageRenderer } from "./chat/messageRenderer";
+import { WorkflowStage } from "@/types/message";
 
 // 定义聊天气泡数据类型
 type BubbleDataType = {
