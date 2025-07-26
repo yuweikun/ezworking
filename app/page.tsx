@@ -366,57 +366,6 @@ const Independent: React.FC = () => {
 
   // loadSessionMessages和相关useEffect将在useXChat之后定义
 
-  // 单条消息存储到数据库的辅助函数
-  const storeMessage = async (
-    sessionId: string,
-    role: "user" | "assistant",
-    content: string,
-    workflowStage?: any
-  ) => {
-    if (!isAuthenticated || !user?.id) {
-      console.warn("用户未认证，跳过消息存储");
-      return false;
-    }
-
-    try {
-      const token = localStorage.getItem("auth_token");
-      if (!token) {
-        console.warn("认证token不存在，跳过消息存储");
-        return false;
-      }
-
-      const response = await fetch("/api/messages/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          session_id: sessionId,
-          role: role,
-          content: content.trim(),
-          workflow_stage: workflowStage,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          console.log(`消息存储成功: ${role} - ${data.data.id}`);
-          return true;
-        } else {
-          console.warn("消息存储失败:", data.message);
-        }
-      } else {
-        console.warn("消息存储请求失败:", response.status, response.statusText);
-      }
-    } catch (error) {
-      console.warn("消息存储错误:", error);
-    }
-
-    return false;
-  };
-
   const requestHandler = async (
     { message }: { message: { content: string; role: string } },
     {
@@ -433,7 +382,7 @@ const Independent: React.FC = () => {
   ) => {
     // 直接使用当前活跃会话ID
     const currentSessionId = activeConversationId;
-    
+
     try {
       // 检查是否有活跃会话
       if (!currentSessionId) {
@@ -448,28 +397,9 @@ const Independent: React.FC = () => {
       }
 
       // 步骤1: 用户消息气泡已在onSubmit中立即渲染
-      
-      // 步骤2: 严格等待用户消息上传到数据库完成
+
+      // 步骤2: 开始AI流式响应（后端会处理用户消息存储）
       setIsStoringMessages(true);
-      onUpdate({ content: "💾 正在保存您的消息...", role: "assistant" });
-      
-      console.log("开始上传用户消息到数据库...");
-      const userStorageSuccess = await storeMessage(
-        currentSessionId,
-        "user",
-        message.content,
-        { stage: "user_input", timestamp: Date.now() }
-      );
-
-      if (!userStorageSuccess) {
-        setIsStoringMessages(false);
-        onError(new Error("用户消息保存失败，请重试"));
-        return;
-      }
-      
-      console.log("用户消息上传完成，开始AI响应...");
-
-      // 步骤3: 用户消息保存成功后，AI才开始响应
       onUpdate({ content: "正在思考中...", role: "assistant" });
 
       const abortController = new AbortController();
@@ -486,7 +416,7 @@ const Independent: React.FC = () => {
       }
 
       // 步骤4: 调用AI流式API
-      const response = await fetch("/api/chat/stream", {
+      const response = await fetch("/api/ai/stream", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -564,45 +494,22 @@ const Independent: React.FC = () => {
                   }
 
                   if (data.finished) {
-                    console.log("AI响应完成，开始上传AI消息到数据库...");
-                    
-                    // 步骤6: AI响应完成后，严格等待AI消息上传到数据库
-                    onUpdate({ 
-                      content: fullContent + "\n\n💾 正在保存AI回复...", 
-                      role: "assistant" 
+                    console.log("AI响应完成，后端已自动保存到数据库");
+
+                    // 步骤6: AI响应完成，后端已处理存储
+                    onUpdate({
+                      content: fullContent,
+                      role: "assistant",
                     });
 
-                    const aiStorageSuccess = await storeMessage(
-                      currentSessionId,
-                      "assistant",
-                      fullContent,
-                      finalWorkflowState || { stage: "ai_response", timestamp: Date.now() }
-                    );
-
-                    if (aiStorageSuccess) {
-                      console.log("AI消息上传完成，用户现在可以继续聊天");
-                      // 步骤7: AI消息保存成功，移除存储提示
-                      onUpdate({ 
-                        content: fullContent, 
-                        role: "assistant" 
-                      });
-                    } else {
-                      console.warn("AI消息保存失败");
-                      // AI消息保存失败，但不阻止用户继续聊天
-                      onUpdate({ 
-                        content: fullContent + "\n\n⚠️ AI回复保存失败", 
-                        role: "assistant" 
-                      });
-                    }
-
-                    // 步骤8: 严格等待所有存储操作完成后，才重置状态允许用户继续聊天
+                    // 重置状态，允许用户继续聊天
                     setIsStoringMessages(false);
-                    
-                    // 给用户一点时间看到最终状态，然后完成对话
+
+                    // 完成对话
                     setTimeout(() => {
                       onSuccess(chunks);
                     }, 300);
-                    
+
                     return;
                   }
 
@@ -624,39 +531,18 @@ const Independent: React.FC = () => {
           }
         }
 
-        // 如果流结束但没有收到finished标志，仍然严格执行存储流程
+        // 如果流结束但没有收到finished标志，完成对话
         if (fullContent.trim() && chunks.length > 0) {
-          console.log("流结束但未收到finished标志，执行存储流程...");
-          
-          onUpdate({ 
-            content: fullContent + "\n\n💾 正在保存AI回复...", 
-            role: "assistant" 
+          console.log("流结束但未收到finished标志，完成对话");
+
+          onUpdate({
+            content: fullContent,
+            role: "assistant",
           });
 
-          const aiStorageSuccess = await storeMessage(
-            currentSessionId,
-            "assistant",
-            fullContent,
-            finalWorkflowState || { stage: "ai_response", timestamp: Date.now() }
-          );
-
-          if (aiStorageSuccess) {
-            console.log("AI消息存储完成");
-            onUpdate({ 
-              content: fullContent, 
-              role: "assistant" 
-            });
-          } else {
-            console.warn("AI消息存储失败");
-            onUpdate({ 
-              content: fullContent + "\n\n⚠️ AI回复保存失败", 
-              role: "assistant" 
-            });
-          }
-
-          // 严格等待存储完成后才允许用户继续
+          // 重置状态，允许用户继续
           setIsStoringMessages(false);
-          
+
           setTimeout(() => {
             onSuccess(chunks);
           }, 300);
@@ -1302,10 +1188,12 @@ const Independent: React.FC = () => {
               content,
               messageRender: () =>
                 CustomMessageRenderer({
-                  id: `msg-${Date.now()}-${Math.random()}`, // 生成唯一ID
-                  role,
-                  content,
-                  timestamp: Date.now(), // 或者从消息中获取实际时间戳
+                  message: {
+                    id: `msg-${Date.now()}-${Math.random()}`, // 生成唯一ID
+                    role,
+                    content,
+                    timestamp: Date.now(), // 或者从消息中获取实际时间戳
+                  },
                 }), // 传递符合 Message 类型的对象
               classNames: {
                 // 加载中的消息添加特殊样式

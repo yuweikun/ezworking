@@ -5,6 +5,7 @@ export interface ResumeInfo {
   school: string; // 学校
   major: string; // 专业
   education: string; // 学历
+  mbti: string; // MBTI性格类型
   skills: string[]; // 技能列表
   experiences: string[]; // 经历列表
   selfEvaluation: string; // 自我评价
@@ -48,6 +49,7 @@ export type Message = {
   formFields?: FormField[]; // 动态表单字段配置
   timestamp: number; // 消息时间戳
   isProcessed?: boolean; // 是否已处理
+  onSubmit?: (data: string) => void; // 表单提交回调函数
   evaluation?: {
     currentQuestion?: EvaluationQuestion; // 当前问题(可选)
     questionList?: EvaluationQuestion[]; // 问题列表(可选)

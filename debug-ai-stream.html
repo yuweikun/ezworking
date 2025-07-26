@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Stream API Debug</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #1677ff;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d9d9d9;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+        
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        
+        button {
+            background: #1677ff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        
+        button:hover {
+            background: #4096ff;
+        }
+        
+        button:disabled {
+            background: #d9d9d9;
+            cursor: not-allowed;
+        }
+        
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 16px;
+            margin-top: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        
+        .log-entry {
+            margin-bottom: 8px;
+            padding: 4px 8px;
+            border-radius: 4px;
+        }
+        
+        .log-info {
+            background: #e6f7ff;
+            color: #1677ff;
+        }
+        
+        .log-success {
+            background: #f6ffed;
+            color: #52c41a;
+        }
+        
+        .log-error {
+            background: #fff2f0;
+            color: #ff4d4f;
+        }
+        
+        .log-warning {
+            background: #fff7e6;
+            color: #d46b08;
+        }
+        
+        .response-area {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 16px;
+            margin-top: 20px;
+            min-height: 200px;
+        }
+        
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-left: 10px;
+        }
+        
+        .status-ready {
+            background: #f6ffed;
+            color: #52c41a;
+        }
+        
+        .status-loading {
+            background: #e6f7ff;
+            color: #1677ff;
+        }
+        
+        .status-error {
+            background: #fff2f0;
+            color: #ff4d4f;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 AI Stream API Debug</h1>
+        
+        <div class="form-group">
+            <label for="email">Email:</label>
+            <input type="email" id="email" value="test@example.com">
+        </div>
+        
+        <div class="form-group">
+            <label for="password">Password:</label>
+            <input type="password" id="password" value="123456">
+        </div>
+        
+        <div class="form-group">
+            <label for="sessionTitle">Session Title:</label>
+            <input type="text" id="sessionTitle" value="Debug Test Session">
+        </div>
+        
+        <div class="form-group">
+            <label for="query">Query:</label>
+            <textarea id="query" placeholder="Enter your message here...">Hello, this is a test message for AI stream API debugging.</textarea>
+        </div>
+        
+        <button onclick="runFullTest()">Run Full Test</button>
+        <button onclick="testAuth()">Test Auth Only</button>
+        <button onclick="clearLog()">Clear Log</button>
+        <span id="status" class="status status-ready">Ready</span>
+        
+        <div class="response-area">
+            <h3>AI Response:</h3>
+            <div id="aiResponse">Waiting for response...</div>
+        </div>
+        
+        <div class="log" id="log">
+            <div class="log-entry log-info">Debug console ready. Click "Run Full Test" to start.</div>
+        </div>
+    </div>
+
+    <script>
+        let currentToken = null;
+        let currentSessionId = null;
+        
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = `log-entry log-${type}`;
+            entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+        
+        function setStatus(text, type = 'ready') {
+            const statusEl = document.getElementById('status');
+            statusEl.textContent = text;
+            statusEl.className = `status status-${type}`;
+        }
+        
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+            document.getElementById('aiResponse').textContent = 'Waiting for response...';
+            log('Log cleared', 'info');
+        }
+        
+        async function testAuth() {
+            setStatus('Authenticating...', 'loading');
+            log('Starting authentication test...', 'info');
+            
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ email, password }),
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    currentToken = data.data.token;
+                    log(`Authentication successful. Token: ${currentToken.substring(0, 20)}...`, 'success');
+                    setStatus('Authenticated', 'ready');
+                    return true;
+                } else {
+                    log(`Authentication failed: ${data.message || 'Unknown error'}`, 'error');
+                    setStatus('Auth Failed', 'error');
+                    return false;
+                }
+            } catch (error) {
+                log(`Authentication error: ${error.message}`, 'error');
+                setStatus('Auth Error', 'error');
+                return false;
+            }
+        }
+        
+        async function createSession() {
+            if (!currentToken) {
+                log('No authentication token available', 'error');
+                return false;
+            }
+            
+            log('Creating test session...', 'info');
+            const title = document.getElementById('sessionTitle').value;
+            
+            try {
+                const response = await fetch('/api/sessions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentToken}`,
+                    },
+                    body: JSON.stringify({ title }),
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    currentSessionId = data.data.id;
+                    log(`Session created successfully. ID: ${currentSessionId}`, 'success');
+                    return true;
+                } else {
+                    log(`Session creation failed: ${data.message || 'Unknown error'}`, 'error');
+                    return false;
+                }
+            } catch (error) {
+                log(`Session creation error: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        async function testAIStream() {
+            if (!currentToken || !currentSessionId) {
+                log('Missing token or session ID', 'error');
+                return false;
+            }
+            
+            log('Testing AI Stream API...', 'info');
+            const query = document.getElementById('query').value;
+            
+            try {
+                const response = await fetch('/api/ai/stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentToken}`,
+                    },
+                    body: JSON.stringify({
+                        session_id: currentSessionId,
+                        query: query,
+                    }),
+                });
+                
+                log(`AI Stream API response status: ${response.status}`, response.ok ? 'success' : 'error');
+                log(`Response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()))}`, 'info');
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    log(`Error response: ${errorText}`, 'error');
+                    return false;
+                }
+                
+                // Handle streaming response
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let fullResponse = '';
+                
+                document.getElementById('aiResponse').textContent = '';
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    
+                    if (done) {
+                        log('Stream ended', 'info');
+                        break;
+                    }
+                    
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split('\\n');
+                    
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const jsonData = line.substring(6).trim();
+                            if (jsonData) {
+                                try {
+                                    const data = JSON.parse(jsonData);
+                                    log(`Received chunk: ${JSON.stringify(data)}`, 'info');
+                                    
+                                    if (data.content) {
+                                        fullResponse += data.content;
+                                        document.getElementById('aiResponse').textContent = fullResponse;
+                                    }
+                                    
+                                    if (data.finished) {
+                                        log('AI response completed', 'success');
+                                        return true;
+                                    }
+                                    
+                                    if (data.error) {
+                                        log(`AI error: ${data.error}`, 'error');
+                                        return false;
+                                    }
+                                } catch (parseError) {
+                                    log(`Failed to parse chunk: ${jsonData}`, 'warning');
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                return true;
+            } catch (error) {
+                log(`AI Stream API error: ${error.message}`, 'error');
+                return false;
+            }
+        }
+        
+        async function runFullTest() {
+            setStatus('Running...', 'loading');
+            log('Starting full test sequence...', 'info');
+            
+            // Step 1: Authentication
+            const authSuccess = await testAuth();
+            if (!authSuccess) {
+                setStatus('Failed', 'error');
+                return;
+            }
+            
+            // Step 2: Create Session
+            const sessionSuccess = await createSession();
+            if (!sessionSuccess) {
+                setStatus('Failed', 'error');
+                return;
+            }
+            
+            // Step 3: Test AI Stream
+            const streamSuccess = await testAIStream();
+            if (streamSuccess) {
+                setStatus('Success', 'ready');
+                log('Full test completed successfully!', 'success');
+            } else {
+                setStatus('Failed', 'error');
+                log('Full test failed at AI Stream step', 'error');
+            }
+        }
+    </script>
+</body>
+</html>

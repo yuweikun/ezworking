@@ -1,12 +1,16 @@
 import { NextRequest } from "next/server";
+import { createServerSupabaseClient } from "../../../../lib/supabase";
 import {
   createErrorResponse,
   handleApiError,
   validateMethod,
 } from "../../../../lib/utils/response";
-import { validateRequestBody } from "../../../../lib/utils/validation";
-
-import { MessageService } from "../../../../services/message-service";
+import {
+  validateRequestBody,
+  validateUUID,
+} from "../../../../lib/utils/validation";
+import { withAuth, checkSessionPermission } from "../../../../lib/utils/auth";
+import type { AuthUser } from "../../../../lib/utils/auth";
 import { CoordinatorAgent } from "../../../../lib/ai/agents/coordinator-agent";
 import { ConversationAgent } from "../../../../lib/ai/agents/conversation-agent";
 import { CareerPositioningWorkflow } from "../../../../lib/ai/workflows/career-positioning-workflow";
@@ -14,115 +18,121 @@ import {
   getOpenAIConfig,
   validateOpenAIConfig,
 } from "../../../../lib/ai/config";
-import {
-  OpenAIMessage,
-  WorkflowState,
-  StreamChunk,
-} from "../../../../lib/ai/types";
-import { createStreamResponse } from "../../../../lib/ai/stream-utils";
+import type { OpenAIMessage } from "../../../../lib/ai/types";
 
 /**
- * AI流式响应接口请求体
+ * 流式聊天请求接口
  */
-interface StreamRequest {
+interface StreamChatRequest {
+  session_id: string;
   query: string;
-  sessionId: string;
 }
 
 /**
- * POST /api/ai/stream - AI流式响应接口
- * 处理用户查询，通过CoordinatorAgent分配任务，返回流式响应
- * Requirements: 6.1, 1.4
+ * POST /api/ai/stream - 流式聊天对话
+ * 1. 存储用户消息到数据库
+ * 2. 获取当前session的所有消息作为上下文
+ * 3. 调用AI流程生成流式回复
+ * 4. 在流式响应结束后存储完整的AI回复到数据库
  */
-async function handleStreamRequest(request: NextRequest) {
+async function handleStreamChat(request: NextRequest, user: AuthUser) {
   try {
     // 验证请求方法
-    const methodError = validateMethod(request, ["GET"]);
+    const methodError = validateMethod(request, ["POST"]);
     if (methodError) return methodError;
 
-    // 从URL查询参数获取数据
-    const { searchParams } = new URL(request.url);
-    const query = searchParams.get("query");
-    const sessionId = searchParams.get("sessionId");
+    // 验证请求体
+    const bodyValidation = await validateRequestBody(request);
+    if (!bodyValidation.isValid) {
+      return createErrorResponse("INVALID_JSON", bodyValidation.error);
+    }
+
+    const { session_id, query }: StreamChatRequest = bodyValidation.data;
 
     // 验证必需字段
-    if (!query) {
-      return createErrorResponse("VALIDATION_ERROR", "缺少必需参数: query");
-    }
-
-    if (!sessionId) {
-      return createErrorResponse("VALIDATION_ERROR", "缺少必需参数: sessionId");
-    }
-
-    // 验证和获取OpenAI配置
-    let openaiConfig;
-    try {
-      openaiConfig = getOpenAIConfig();
-      validateOpenAIConfig(openaiConfig);
-    } catch (configError: any) {
+    if (!session_id || !query) {
       return createErrorResponse(
-        "CONFIG_ERROR",
-        `OpenAI配置错误: ${configError.message}`
+        "VALIDATION_ERROR",
+        "缺少必需参数: session_id 或 query"
       );
     }
 
-    // 存储用户消息
-    try {
-      await MessageService.createMessage(sessionId, "user", query, undefined, {
-        showError: false,
-        retryOnFailure: false,
+    // 验证session_id格式
+    if (!validateUUID(session_id)) {
+      return createErrorResponse("INVALID_SESSION_ID");
+    }
+
+    // 检查用户权限
+    const permissionResult = await checkSessionPermission(session_id, user.id);
+    if (!permissionResult.success) {
+      return createErrorResponse(
+        "ACCESS_DENIED",
+        permissionResult.error || "无权访问此会话",
+        403
+      );
+    }
+
+    const supabase = createServerSupabaseClient();
+
+    // 1. 存储用户消息到数据库
+    const { error: userMessageError } = await supabase
+      .from("chat_messages")
+      .insert({
+        session_id,
+        role: "user",
+        content: query,
       });
-    } catch (messageError) {
-      console.warn("Failed to store user message:", messageError);
+
+    if (userMessageError) {
+      return handleApiError(userMessageError, "存储用户消息失败");
     }
 
-    // 获取对话历史和工作流状态
-    let history: OpenAIMessage[] = [];
-    let currentWorkflowState: WorkflowState | undefined;
+    // 2. 获取当前session的所有消息作为上下文（包括刚刚存储的用户消息）
+    const { data: messages, error: messagesError } = await supabase
+      .from("chat_messages")
+      .select("role, content, workflow_stage")
+      .eq("session_id", session_id)
+      .order("timestamp", { ascending: true });
 
-    try {
-      history = await MessageService.formatMessagesForOpenAI(
-        sessionId, // 直接使用sessionId作为用户标识
-        sessionId,
-        true
-      );
-      currentWorkflowState = await MessageService.getWorkflowState(
-        sessionId,
-        sessionId
-      );
-    } catch (historyError) {
-      console.warn("Failed to fetch message history:", historyError);
+    if (messagesError) {
+      return handleApiError(messagesError, "获取消息历史失败");
     }
 
-    // 创建流式响应
-    const responseStream = await createAIResponseStream(
+    // 3. 准备AI上下文（排除最后一条用户消息，避免重复）
+    const context: OpenAIMessage[] = (messages || [])
+      .slice(0, -1) // 排除最后一条消息（刚存储的用户消息）
+      .map((msg): OpenAIMessage => {
+        // 确保角色类型正确
+        let role: "user" | "assistant" | "system";
+        if (msg.role === "ai") {
+          role = "assistant";
+        } else if (msg.role === "user") {
+          role = "user";
+        } else if (msg.role === "system") {
+          role = "system";
+        } else {
+          // 默认为user，处理未知角色
+          role = "user";
+        }
+
+        return {
+          role,
+          content: msg.content,
+        } as OpenAIMessage;
+      });
+
+    // 4. 创建流式响应
+    const responseStream = await createAIStreamResponse(
       query,
-      history,
-      currentWorkflowState,
-      sessionId,
-      openaiConfig
+      context,
+      session_id
     );
 
-    // 创建流式响应并收集内容用于存储
-    const stream = createStreamResponse(
+    // 5. 创建流式响应并在结束时存储完整内容
+    const stream = createStreamResponseWithStorage(
       responseStream,
-      async (fullContent: string, finalWorkflowState: any) => {
-        // 存储AI回复
-        try {
-          const workStage = finalWorkflowState
-            ? JSON.stringify(finalWorkflowState)
-            : undefined;
-          await MessageService.createMessage(
-            sessionId,
-            "assistant",
-            fullContent,
-            workStage,
-            { showError: false, retryOnFailure: false }
-          );
-        } catch (storeError) {
-          console.warn("Failed to store assistant message:", storeError);
-        }
-      }
+      session_id,
+      supabase
     );
 
     return new Response(stream, {
@@ -136,69 +146,166 @@ async function handleStreamRequest(request: NextRequest) {
       },
     });
   } catch (error) {
-    return handleApiError(error, "GET /api/ai/stream");
+    return handleApiError(error, "POST /api/ai/stream");
   }
 }
 
-// 修改导出方法
-export const GET = handleStreamRequest;
-export const POST = createErrorResponse("METHOD_NOT_ALLOWED");
+export const POST = withAuth(handleStreamChat);
 
 /**
- * 创建AI响应流生成器
- * Requirements: 4.1, 4.2, 4.3, 4.4, 4.5
+ * 创建AI流式响应
  */
-async function createAIResponseStream(
+async function createAIStreamResponse(
   query: string,
-  history: OpenAIMessage[],
-  workflowState: WorkflowState | undefined,
-  sessionId: string,
-  openaiConfig: any
-): Promise<AsyncGenerator<StreamChunk>> {
-  return (async function* () {
+  context: OpenAIMessage[],
+  sessionId: string
+) {
+  try {
+    // 获取OpenAI配置
+    const openaiConfig = getOpenAIConfig();
+    validateOpenAIConfig(openaiConfig);
+
+    // 初始化CoordinatorAgent进行任务分配
+    const coordinator = new CoordinatorAgent(openaiConfig);
+
+    // 获取当前工作流状态
+    let currentWorkflowState;
     try {
-      // 初始化CoordinatorAgent
-      const coordinator = new CoordinatorAgent(openaiConfig);
-
-      // 任务分配
-      let nodeId: "conversation" | "career-positioning";
-      try {
-        const assignment = await coordinator.assignTask(query, workflowState);
-        nodeId = assignment.nodeId;
-      } catch (coordinatorError) {
-        console.warn(
-          "Coordinator assignment failed, defaulting to conversation:",
-          coordinatorError
-        );
-        nodeId = "conversation";
-      }
-
-      // 根据选择的节点执行相应的Agent
-      let responseStream: AsyncGenerator<StreamChunk>;
-
-      if (nodeId === "conversation") {
-        const conversationAgent = new ConversationAgent(openaiConfig);
-        responseStream = conversationAgent.streamExecute({
-          query,
-          history,
-          workflowState,
-        });
-      } else {
-        const careerWorkflow = new CareerPositioningWorkflow(openaiConfig);
-        responseStream = careerWorkflow.execute(query, history, workflowState);
-      }
-
-      // 直接传递响应流，存储逻辑移到createStreamResponse中处理
-      for await (const chunk of responseStream) {
-        yield chunk;
-      }
-    } catch (error: any) {
-      // Requirement 4.5: 错误处理 - 返回错误信息并结束流式响应
-      yield {
-        content: `处理失败: ${error.message}`,
-        finished: true,
-        workflowState: workflowState || null,
-      };
+      const { MessageService } = await import(
+        "../../../../services/message-service"
+      );
+      currentWorkflowState = await MessageService.getWorkflowState(
+        sessionId,
+        sessionId
+      );
+    } catch (error) {
+      console.warn("Failed to get workflow state:", error);
+      currentWorkflowState = undefined;
     }
-  })();
+
+    // 任务分配
+    let nodeId: "conversation" | "career-positioning";
+    try {
+      const assignment = await coordinator.assignTask(
+        query,
+        currentWorkflowState
+      );
+      nodeId = assignment.nodeId;
+    } catch (error) {
+      console.warn(
+        "Coordinator assignment failed, defaulting to conversation:",
+        error
+      );
+      nodeId = "conversation";
+    }
+
+    // 根据分配的节点执行相应的Agent
+    if (nodeId === "conversation") {
+      const conversationAgent = new ConversationAgent(openaiConfig);
+      return conversationAgent.streamExecute({
+        query,
+        history: context,
+        workflowState: currentWorkflowState,
+      });
+    } else {
+      const careerWorkflow = new CareerPositioningWorkflow(openaiConfig);
+      return careerWorkflow.execute(query, context, currentWorkflowState);
+    }
+  } catch (error) {
+    console.error("AI stream response generation failed:", error);
+    // 返回错误流
+    return (async function* () {
+      yield {
+        content: "抱歉，我现在无法处理您的请求，请稍后再试。",
+        finished: true,
+        workflowState: null,
+      };
+    })();
+  }
+}
+
+/**
+ * 创建带存储功能的流式响应
+ */
+function createStreamResponseWithStorage(
+  responseStream: AsyncGenerator<any>,
+  sessionId: string,
+  supabase: any
+): ReadableStream {
+  let fullContent = "";
+  let finalWorkflowState: any = null;
+
+  return new ReadableStream({
+    async start(controller) {
+      try {
+        for await (const chunk of responseStream) {
+          // 累积完整内容
+          if (chunk.content) {
+            fullContent += chunk.content;
+          }
+
+          // 更新工作流状态
+          if (chunk.workflowState) {
+            finalWorkflowState = chunk.workflowState;
+          }
+
+          // 发送流式数据
+          const data = JSON.stringify({
+            content: chunk.content || "",
+            finished: chunk.finished || false,
+            workflowState: chunk.workflowState || null,
+          });
+
+          controller.enqueue(`data: ${data}\n\n`);
+
+          // 如果流结束，存储完整的AI回复
+          if (chunk.finished) {
+            try {
+              await supabase.from("chat_messages").insert({
+                session_id: sessionId,
+                role: "ai",
+                content: fullContent,
+                workflow_stage: finalWorkflowState
+                  ? JSON.stringify(finalWorkflowState)
+                  : null,
+              });
+            } catch (storeError) {
+              console.error("Failed to store AI message:", storeError);
+            }
+            break;
+          }
+        }
+      } catch (error) {
+        console.error("Stream processing error:", error);
+
+        // 发送错误信息
+        const errorData = JSON.stringify({
+          content: "处理过程中出现错误，请稍后重试。",
+          finished: true,
+          workflowState: null,
+          error: true,
+        });
+        controller.enqueue(`data: ${errorData}\n\n`);
+      } finally {
+        controller.close();
+      }
+    },
+  });
+}
+
+// 不支持的方法
+export async function GET() {
+  return createErrorResponse("METHOD_NOT_ALLOWED");
+}
+
+export async function PUT() {
+  return createErrorResponse("METHOD_NOT_ALLOWED");
+}
+
+export async function DELETE() {
+  return createErrorResponse("METHOD_NOT_ALLOWED");
+}
+
+export async function PATCH() {
+  return createErrorResponse("METHOD_NOT_ALLOWED");
 }

@@ -1,4 +1,4 @@
-import { FormField, Message, WorkflowStage } from "@/types/message";
+import { FormField, Message, ResumeInfo, WorkflowStage } from "@/types/message"; // Updated import
 import { BubbleDataType } from "@ant-design/x/es/bubble/BubbleList";
 import { MessageInfo } from "@ant-design/x/es/use-x-chat";
 import { Form, Input, Select, Button, Card, Typography } from "antd";
@@ -36,7 +36,7 @@ const generateMockData = (): Message => {
 };
 
 // 自定义消息渲染组件
-export const CustomMessageRenderer = ({ message }: { Message }) => {
+export const CustomMessageRenderer = ({ message }: { message: Message }) => {
   console.log("Rendering message:", message);
   if (message.role === "user") {
     return (
@@ -207,10 +207,6 @@ export const CustomMessageRenderer = ({ message }: { Message }) => {
                   border: "1px solid #e0e0e0",
                   background: "white",
                   transition: "all 0.2s",
-                  ":hover": {
-                    borderColor: "#1a73e8",
-                    boxShadow: "0 2px 8px rgba(26, 115, 232, 0.2)",
-                  },
                 }}
               >
                 <span
@@ -222,7 +218,7 @@ export const CustomMessageRenderer = ({ message }: { Message }) => {
                 >
                   {key}.
                 </span>
-                {value}
+                {String(value)}
               </Button>
             ))}
         </div>
@@ -315,12 +311,12 @@ export const CustomMessageRenderer = ({ message }: { Message }) => {
 function renderFormField(field: FormField) {
   switch (field.type) {
     case "text":
-      return <Input name={field.name} />;
+      return <Input />;
     case "textarea":
-      return <TextArea rows={4} name={field.name} />;
+      return <TextArea rows={4} />;
     case "select":
       return (
-        <Select name={field.name}>
+        <Select>
           {field.options?.map((opt) => (
             <Option key={opt} value={opt}>
               {opt}
@@ -330,7 +326,7 @@ function renderFormField(field: FormField) {
       );
     case "multi-select":
       return (
-        <Select name={field.name} mode="multiple">
+        <Select mode="multiple">
           {field.options?.map((opt) => (
             <Option key={opt} value={opt}>
               {opt}
@@ -339,6 +335,6 @@ function renderFormField(field: FormField) {
         </Select>
       );
     default:
-      return <Input name={field.name} />;
+      return <Input />;
   }
 }
