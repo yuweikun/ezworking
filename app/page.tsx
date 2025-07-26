@@ -382,88 +382,52 @@ const Independent: React.FC = () => {
     syncConversationState,
   ]);
 
-  const requestHandler = useCallback(
-    async ({ message }, { onUpdate, onSuccess }) => {
-      try {
-        // if (!activeConversationId) {
-        //   throw new Error("No active conversation");
-        // }
+  const requestHandler = async ({ message }, { onUpdate, onSuccess }) => {
+    try {
+      // Initial loading state
+      onUpdate({ content: "Thinking...", role: "assistant" });
+      const token = localStorage.getItem("authToken");
 
-        // Initial loading state
-        onUpdate({ content: "Thinking...", role: "assistant" });
-        const token = localStorage.getItem("authToken"); // 从 localStorage 中获取 token
-        console.log("message: ", message);
-        const requestData = {
-          query: message.content, // 直接使用 message 的 content
-          sessionId: "162756cb-0b37-499b-8999-7abebc871f91", // 使用 activeConversationId
-          // sessionId: activeConversationId, // 使用 activeConversationId
-        };
-        console.log("requestData: ", requestData);
-        const response = await fetch("/api/ai/stream", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(requestData),
-        });
-        console.log("response: ", response);
+      const eventSource = new EventSource(
+        `/api/ai/stream?query=${encodeURIComponent(
+          message.content
+        )}&sessionId=162756cb-0b37-499b-8999-7abebc871f91`
+      );
 
-        if (!response.ok) {
-          throw new Error(`Request failed: ${response.status}`);
-        }
+      let fullContent = "";
 
-        if (!response.body) {
-          throw new Error("No response body");
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let fullContent = "";
-
-        while (true) {
-          console.log("reading...");
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          const lines = chunk.split("\n").filter((line) => line.trim() !== "");
-
-          // 处理每一行数据
-          for (const line of lines) {
-            console.log("line: ", line);
-            if (line.startsWith("data:")) {
-              const data = line.substring(5).trim();
-              if (data === "[DONE]") continue;
-
-              try {
-                const parsed = JSON.parse(data);
-                if (parsed.content) {
-                  fullContent += parsed.content;
-                  onUpdate({
-                    content: fullContent,
-                    role: "assistant",
-                    workflowState: parsed.workflowState,
-                  });
-                }
-              } catch (e) {
-                console.error("Failed to parse stream data:", e);
-              }
-            }
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          console.log("Received SSE data:", data);
+          if (data.content) {
+            fullContent += data.content;
+            onUpdate({
+              content: fullContent,
+              role: "assistant",
+            });
           }
+        } catch (e) {
+          console.error("Failed to parse SSE data:", e);
         }
+      };
 
-        onSuccess(fullContent);
-      } catch (error) {
-        onUpdate({
-          content: `Error: ${error.message}`,
+      eventSource.onerror = (error) => {
+        console.error("SSE error:", error);
+        eventSource.close();
+        onSuccess({
+          content: fullContent,
           role: "assistant",
-          finished: true,
         });
-      }
-    },
-    [activeConversationId]
-  );
+      };
+    } catch (error) {
+      onUpdate({
+        content: `Error: ${error.message}`,
+        role: "assistant",
+        finished: true,
+      });
+    }
+  };
 
   /**
    * 🔔 请将 BASE_URL、PATH、MODEL、API_KEY 替换为你自己的值

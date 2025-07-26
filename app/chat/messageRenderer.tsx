@@ -36,7 +36,7 @@ const generateMockData = (): Message => {
 
 // 自定义消息渲染组件
 export const CustomMessageRenderer = (message: Message) => {
-  // console.log("Rendering message:", message);
+  console.log("Rendering message:", message);
   // 使用枚举代替字符串字面量
   if (message.workflow_stage === WorkflowStage.START) {
     const defaultFields: FormField[] = [
