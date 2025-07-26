@@ -2,6 +2,7 @@ import { FormField, Message, WorkflowStage } from "@/types/message";
 import { BubbleDataType } from "@ant-design/x/es/bubble/BubbleList";
 import { MessageInfo } from "@ant-design/x/es/use-x-chat";
 import { Form, Input, Select, Button, Card, Typography } from "antd";
+import { title } from "process";
 const { Title, Text } = Typography;
 const { Option } = Select;
 const { TextArea } = Input;
@@ -12,7 +13,7 @@ const generateMockData = (): Message => {
     id: "mock-1",
     role: "assistant",
     content: "这是测评问题",
-    workflow_stage: WorkflowStage.EVALUATION,
+    phase: WorkflowStage.EVALUATION,
     evaluation: {
       currentQuestion: {
         id: "q1",
@@ -35,10 +36,26 @@ const generateMockData = (): Message => {
 };
 
 // 自定义消息渲染组件
-export const CustomMessageRenderer = (message: Message) => {
+export const CustomMessageRenderer = ({ message }: { Message }) => {
   console.log("Rendering message:", message);
-  // 使用枚举代替字符串字面量
-  if (message.workflow_stage === WorkflowStage.START) {
+  if (message.role === "user") {
+    return (
+      <div
+      // style={{
+      //   maxWidth: "80%",
+      //   padding: "12px 16px",
+      //   background: "#f0f4f8",
+      //   borderRadius: "12px",
+      //   marginLeft: "auto",
+      //   boxShadow: "0 2px 8px rgba(0, 0, 0, 0.05)",
+      // }}
+      >
+        {message.content}
+      </div>
+    );
+  }
+
+  if (message.phase === WorkflowStage.InfoCollection) {
     const defaultFields: FormField[] = [
       { name: "name", label: "姓名", type: "text", required: true },
       { name: "gender", label: "性别", type: "select", options: ["男", "女"] },
@@ -62,23 +79,42 @@ export const CustomMessageRenderer = (message: Message) => {
 
     const formFields = message.formFields || defaultFields;
 
+    const handleFormSubmit = (values: any) => {
+      console.log("表单提交:", values);
+      // 触发下一次对话
+      if (message.onSubmit) {
+        message.onSubmit(values);
+      }
+    };
+
     return (
-      <Card style={{ width: "100%" }}>
-        <Title level={4} style={{ marginBottom: 24 }}>
-          请填写简历信息
+      <Card
+        style={{
+          width: "100%",
+          border: "none",
+          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)",
+        }}
+      >
+        <Title level={4} style={{ marginBottom: 24, color: "#1a73e8" }}>
+          {message.content}
         </Title>
-        <Form layout="vertical">
+        <Form layout="vertical" onFinish={handleFormSubmit}>
           {formFields.map((field) => (
             <Form.Item
               key={field.name}
-              label={field.label}
+              label={<span style={{ fontWeight: 500 }}>{field.label}</span>}
               required={field.required}
+              name={field.name}
             >
               {renderFormField(field)}
             </Form.Item>
           ))}
           <Form.Item>
-            <Button type="primary" htmlType="submit">
+            <Button
+              type="primary"
+              htmlType="submit"
+              style={{ width: "120px", height: "40px" }}
+            >
               提交
             </Button>
           </Form.Item>
@@ -87,78 +123,154 @@ export const CustomMessageRenderer = (message: Message) => {
     );
   }
 
-  // 修改测评阶段的渲染部分
-  if (message.workflow_stage === WorkflowStage.EVALUATION) {
-    const mockData = generateMockData(); // 使用假数据
-    const { currentQuestion, progress } = mockData.evaluation || {};
-    const { content, options = [], isMultipleChoice } = currentQuestion || {};
+  if (message.phase === WorkflowStage.EVALUATION) {
+    const title = message.content.split("\n")[0];
+    const jsonStr = message.content.split("\n")[2];
+    const qaData = JSON.parse(jsonStr);
 
     const handleOptionSelect = (selectedKey: string) => {
       console.log(`用户选择了选项 ${selectedKey}`);
-      // 这里可以添加提交答案的逻辑
+      if (message.onSubmit) {
+        message.onSubmit({ selectedKey });
+      }
     };
 
     return (
-      <Card style={{ width: "100%" }}>
-        {progress && (
-          <div style={{ marginBottom: 16 }}>
-            <Text type="secondary">
-              第 {progress.current} 题 / 共 {progress.total} 题
-            </Text>
-          </div>
-        )}
-        <Title level={4} style={{ marginBottom: 16 }}>
-          {content || "测评问题"}
-        </Title>
-        <div style={{ display: "grid", gap: 8 }}>
-          {options.map((option) => (
-            <Button
-              key={option.key}
-              block
-              onClick={() => handleOptionSelect(option.key)}
-              style={{
-                textAlign: "left",
-                padding: "12px 16px",
-                height: "auto",
-                whiteSpace: "normal",
-              }}
-            >
-              <span style={{ fontWeight: "bold" }}>{option.key}.</span>{" "}
-              {option.text}
-            </Button>
-          ))}
+      <Card
+        style={{
+          width: "100%",
+          border: "none",
+          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)",
+          background: "#f8fafc",
+        }}
+      >
+        <div style={{ marginBottom: 16 }}>
+          <Text type="secondary" style={{ fontSize: "14px" }}>
+            {title}
+          </Text>
         </div>
-        {isMultipleChoice && (
-          <div style={{ marginTop: 16, textAlign: "center" }}>
-            <Text type="secondary">(多选题，可多选)</Text>
-          </div>
-        )}
+        <Title level={4} style={{ marginBottom: 24, color: "#1a73e8" }}>
+          {qaData.question || "测评问题"}
+        </Title>
+        <div style={{ display: "grid", gap: 12 }}>
+          {Object.entries(qaData)
+            .filter(([key]) => key !== "question")
+            .map(([key, value]) => (
+              <Button
+                key={key}
+                block
+                onClick={() => handleOptionSelect(key)}
+                style={{
+                  textAlign: "left",
+                  padding: "16px 20px",
+                  height: "auto",
+                  whiteSpace: "normal",
+                  borderRadius: "8px",
+                  border: "1px solid #e0e0e0",
+                  background: "white",
+                  transition: "all 0.2s",
+                  ":hover": {
+                    borderColor: "#1a73e8",
+                    boxShadow: "0 2px 8px rgba(26, 115, 232, 0.2)",
+                  },
+                }}
+              >
+                <span
+                  style={{
+                    fontWeight: "bold",
+                    color: "#1a73e8",
+                    marginRight: "8px",
+                  }}
+                >
+                  {key}.
+                </span>
+                {value}
+              </Button>
+            ))}
+        </div>
       </Card>
     );
   }
 
-  // 推荐阶段使用Ant Design组件
-  if (message.workflow_stage === WorkflowStage.RECOMMENDATION) {
-    const { content: position, description } = message;
+  if (message.phase === WorkflowStage.RECOMMENDATION) {
+    const jobData = JSON.parse(message.content);
+    const { job_title, job_description } = jobData;
+
     return (
-      <Card style={{ width: "100%" }}>
-        <Title level={4} style={{ marginBottom: 8 }}>
-          {position}
+      <Card
+        style={{
+          width: "100%",
+          border: "none",
+          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.08)",
+          background: "linear-gradient(to right, #f8fafc, #f0f7ff)",
+        }}
+      >
+        <Title
+          level={4}
+          style={{
+            marginBottom: 12,
+            color: "#1a73e8",
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+          }}
+        >
+          <span>🏢</span>
+          {job_title || "职位推荐"}
         </Title>
-        <Text style={{ marginBottom: 16, color: "#666" }}>{description}</Text>
-        <div style={{ display: "flex", gap: 8 }}>
-          <Button type="primary" ghost>
+        <Text
+          style={{
+            marginBottom: 24,
+            color: "#555",
+            fontSize: "15px",
+            lineHeight: 1.6,
+          }}
+        >
+          {job_description || "职位描述"}
+        </Text>
+        <div style={{ display: "flex", gap: 12 }}>
+          <Button
+            type="primary"
+            ghost
+            style={{
+              flex: 1,
+              height: "40px",
+              borderRadius: "8px",
+              fontWeight: 500,
+            }}
+          >
             喜欢
           </Button>
-          <Button danger>不喜欢</Button>
+          <Button
+            danger
+            style={{
+              flex: 1,
+              height: "40px",
+              borderRadius: "8px",
+              fontWeight: 500,
+            }}
+          >
+            不喜欢
+          </Button>
         </div>
       </Card>
     );
   }
 
-  // console.log("Unknown workflow stage: go default");
   // 默认渲染为普通文本
-  return <div>{message.content}</div>;
+  return (
+    <div
+    // style={{
+    //   maxWidth: "80%",
+    //   padding: "12px 16px",
+    //   background: "#f0f4f8",
+    //   borderRadius: "12px",
+    //   boxShadow: "0 2px 8px rgba(0, 0, 0, 0.05)",
+    // }}
+    >
+      {message.content}
+    </div>
+  );
 };
 
 // 更新表单字段渲染函数

@@ -45,6 +45,7 @@ import { useConversationRealtime } from "../hooks/use-conversation-realtime";
 import { ErrorHandler } from "../lib/error-handler";
 import { ErrorBoundary } from "../components/error-boundary";
 import { CustomMessageRenderer } from "./chat/messageRenderer";
+import { WorkflowStage } from "@/types/message";
 
 // 定义聊天气泡数据类型
 type BubbleDataType = {
@@ -395,11 +396,13 @@ const Independent: React.FC = () => {
       );
 
       let fullContent = "";
+      let curWorkflowState: any = null;
 
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
           console.log("Received SSE data:", data);
+
           if (data.content) {
             fullContent += data.content;
             onUpdate({
@@ -407,6 +410,25 @@ const Independent: React.FC = () => {
               role: "assistant",
             });
           }
+
+          if (data?.workflowState) {
+            curWorkflowState = data?.workflowState;
+            const curWorkFlowId = curWorkflowState?.workflowId;
+            const curPhase = curWorkflowState?.phase;
+            console.log("Received workflow state:", curWorkflowState);
+          }
+          // if (curPhase) {
+          //   if (curPhase === WorkflowStage.InfoCollection) {
+          //     onSuccess({
+          //       ...data.workflowState,
+          //       content: fullContent,
+          //       // workflow_stage: data.workflowState.workflowId,
+          //       role: "assistant",
+          //     });
+          //     return;
+          //   } else if (curPhase === WorkflowStage.EVALUATION) {
+          //   }
+          // }
         } catch (e) {
           console.error("Failed to parse SSE data:", e);
         }
@@ -416,6 +438,7 @@ const Independent: React.FC = () => {
         console.error("SSE error:", error);
         eventSource.close();
         onSuccess({
+          ...curWorkflowState,
           content: fullContent,
           role: "assistant",
         });
@@ -935,6 +958,7 @@ const Independent: React.FC = () => {
             ...i.message,
             messageRender: () =>
               CustomMessageRenderer({
+                ...i,
                 id: `msg-${Date.now()}-${Math.random()}`, // 生成唯一ID
                 role: i.message.role as "assistant" | "user" | "system",
                 content: i.message.content,
