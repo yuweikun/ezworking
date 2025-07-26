@@ -88,10 +88,10 @@ export class CareerPositioningWorkflow {
     // 这里可以切换phase
     return {
       workflowId: "career-positioning",
-      // phase: "info_collection",
+      phase: "info_collection",
       // phase: "assessment",
       // phase: "analysis",
-      phase: "recommendation",
+      // phase: "recommendation",
       progress: 0,
     };
   }
