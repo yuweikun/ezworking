@@ -37,7 +37,7 @@ import {
 import { Button, Flex, type GetProp, Space, Spin, message, Modal } from "antd";
 import { createStyles } from "antd-style"; // 样式创建工具
 // import dayjs from 'dayjs';  // 日期处理库 - 暂时未使用
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useConversation } from "../contexts/conversation-context";
 import { useAuth } from "../contexts/auth-context";
 import { generateDefaultTitle } from "../types/conversation-utils";
@@ -382,75 +382,162 @@ const Independent: React.FC = () => {
     syncConversationState,
   ]);
 
+  const requestHandler = useCallback(
+    async ({ message }, { onUpdate, onSuccess }) => {
+      try {
+        // if (!activeConversationId) {
+        //   throw new Error("No active conversation");
+        // }
+
+        // Initial loading state
+        onUpdate({ content: "Thinking...", role: "assistant" });
+        const token = localStorage.getItem("authToken"); // 从 localStorage 中获取 token
+        console.log("message: ", message);
+        const requestData = {
+          query: message.content, // 直接使用 message 的 content
+          sessionId: "162756cb-0b37-499b-8999-7abebc871f91", // 使用 activeConversationId
+          // sessionId: activeConversationId, // 使用 activeConversationId
+        };
+        console.log("requestData: ", requestData);
+        const response = await fetch("/api/ai/stream", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(requestData),
+        });
+        console.log("response: ", response);
+
+        if (!response.ok) {
+          throw new Error(`Request failed: ${response.status}`);
+        }
+
+        if (!response.body) {
+          throw new Error("No response body");
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullContent = "";
+
+        while (true) {
+          console.log("reading...");
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split("\n").filter((line) => line.trim() !== "");
+
+          // 处理每一行数据
+          for (const line of lines) {
+            console.log("line: ", line);
+            if (line.startsWith("data:")) {
+              const data = line.substring(5).trim();
+              if (data === "[DONE]") continue;
+
+              try {
+                const parsed = JSON.parse(data);
+                if (parsed.content) {
+                  fullContent += parsed.content;
+                  onUpdate({
+                    content: fullContent,
+                    role: "assistant",
+                    workflowState: parsed.workflowState,
+                  });
+                }
+              } catch (e) {
+                console.error("Failed to parse stream data:", e);
+              }
+            }
+          }
+        }
+
+        onSuccess(fullContent);
+      } catch (error) {
+        onUpdate({
+          content: `Error: ${error.message}`,
+          role: "assistant",
+          finished: true,
+        });
+      }
+    },
+    [activeConversationId]
+  );
+
   /**
    * 🔔 请将 BASE_URL、PATH、MODEL、API_KEY 替换为你自己的值
    */
 
   // ==================== AI 代理配置 ====================
-  const [agent] = useXAgent<BubbleDataType>({
-    baseURL: "https://api.x.ant.design/api/llm_siliconflow_deepseekr1", // API 基础地址
-    model: "deepseek-ai/DeepSeek-R1", // 使用的 AI 模型
-    dangerouslyApiKey: "Bearer sk-xxxxxxxxxxxxxxxxxxxx", // API 密钥（需要替换为真实的）
+  // const [agent] = useXAgent<BubbleDataType>({
+  //   baseURL: "https://api.x.ant.design/api/llm_siliconflow_deepseekr1", // API 基础地址
+  //   model: "deepseek-ai/DeepSeek-R1", // 使用的 AI 模型
+  //   dangerouslyApiKey: "Bearer sk-xxxxxxxxxxxxxxxxxxxx", // API 密钥（需要替换为真实的）
+  // });
+  const [agent] = useXAgent({
+    request: requestHandler, // 自定义请求处理函数
   });
+
   const loading = agent.isRequesting(); // 获取请求状态
 
   // 聊天功能配置
   const { onRequest, messages, setMessages } = useXChat({
     agent, // 传入 AI 代理
     // 请求失败时的回退处理
-    requestFallback: (_, { error }) => {
-      if (error.name === "AbortError") {
-        return {
-          content: "Request is aborted", // 请求被取消
-          role: "assistant",
-        };
-      }
-      return {
-        content: "Request failed, please try again!", // 请求失败，请重试
-        role: "assistant",
-      };
-    },
-    // 消息转换处理 - 用于处理流式响应
-    transformMessage: (info) => {
-      const { originMessage, chunk } = info || {};
-      let currentContent = ""; // 当前内容
-      let currentThink = ""; // 当前思考内容
-      try {
-        // 解析流式数据
-        if (chunk?.data && !chunk?.data.includes("DONE")) {
-          const message = JSON.parse(chunk?.data);
-          currentThink = message?.choices?.[0]?.delta?.reasoning_content || ""; // 推理内容
-          currentContent = message?.choices?.[0]?.delta?.content || ""; // 回复内容
-        }
-      } catch (error) {
-        console.error(error);
-      }
+    // requestFallback: (_, { error }) => {
+    //   if (error.name === "AbortError") {
+    //     return {
+    //       content: "Request is aborted", // 请求被取消
+    //       role: "assistant",
+    //     };
+    //   }
+    //   return {
+    //     content: "Request failed, please try again!", // 请求失败，请重试
+    //     role: "assistant",
+    //   };
+    // },
+    // // 消息转换处理 - 用于处理流式响应
+    // transformMessage: (info) => {
+    //   const { originMessage, chunk } = info || {};
+    //   let currentContent = ""; // 当前内容
+    //   let currentThink = ""; // 当前思考内容
+    //   try {
+    //     // 解析流式数据
+    //     if (chunk?.data && !chunk?.data.includes("DONE")) {
+    //       const message = JSON.parse(chunk?.data);
+    //       currentThink = message?.choices?.[0]?.delta?.reasoning_content || ""; // 推理内容
+    //       currentContent = message?.choices?.[0]?.delta?.content || ""; // 回复内容
+    //     }
+    //   } catch (error) {
+    //     console.error(error);
+    //   }
 
-      let content = "";
+    //   let content = "";
 
-      // 处理思考过程的显示逻辑
-      if (!originMessage?.content && currentThink) {
-        content = `<think>${currentThink}`;
-      } else if (
-        originMessage?.content?.includes("<think>") &&
-        !originMessage?.content.includes("</think>") &&
-        currentContent
-      ) {
-        content = `${originMessage?.content}</think>${currentContent}`;
-      } else {
-        content = `${
-          originMessage?.content || ""
-        }${currentThink}${currentContent}`;
-      }
-      return {
-        content: content,
-        role: "assistant",
-      };
-    },
-    // 设置取消控制器
-    resolveAbortController: (controller) => {
-      abortController.current = controller;
-    },
+    //   // 处理思考过程的显示逻辑
+    //   if (!originMessage?.content && currentThink) {
+    //     content = `<think>${currentThink}`;
+    //   } else if (
+    //     originMessage?.content?.includes("<think>") &&
+    //     !originMessage?.content.includes("</think>") &&
+    //     currentContent
+    //   ) {
+    //     content = `${originMessage?.content}</think>${currentContent}`;
+    //   } else {
+    //     content = `${
+    //       originMessage?.content || ""
+    //     }${currentThink}${currentContent}`;
+    //   }
+    //   return {
+    //     content: content,
+    //     role: "assistant",
+    //   };
+    // },
+    // // 设置取消控制器
+    // resolveAbortController: (controller) => {
+    //   abortController.current = controller;
+    // },
   });
 
   // ==================== 事件处理 ====================

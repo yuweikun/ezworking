@@ -36,8 +36,9 @@ const generateMockData = (): Message => {
 
 // 自定义消息渲染组件
 export const CustomMessageRenderer = (message: Message) => {
+  // console.log("Rendering message:", message);
   // 使用枚举代替字符串字面量
-  if (message.workflow_stage === WorkflowStage.START || 1) {
+  if (message.workflow_stage === WorkflowStage.START) {
     const defaultFields: FormField[] = [
       { name: "name", label: "姓名", type: "text", required: true },
       { name: "gender", label: "性别", type: "select", options: ["男", "女"] },
@@ -87,7 +88,7 @@ export const CustomMessageRenderer = (message: Message) => {
   }
 
   // 修改测评阶段的渲染部分
-  if (message.workflow_stage === WorkflowStage.EVALUATION || 1) {
+  if (message.workflow_stage === WorkflowStage.EVALUATION) {
     const mockData = generateMockData(); // 使用假数据
     const { currentQuestion, progress } = mockData.evaluation || {};
     const { content, options = [], isMultipleChoice } = currentQuestion || {};
@@ -155,8 +156,9 @@ export const CustomMessageRenderer = (message: Message) => {
     );
   }
 
+  // console.log("Unknown workflow stage: go default");
   // 默认渲染为普通文本
-  return <div>{message.content}123</div>;
+  return <div>{message.content}</div>;
 };
 
 // 更新表单字段渲染函数

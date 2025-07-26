@@ -19,9 +19,9 @@ export class AuthService {
     try {
       const loginData: LoginRequest = { email, password };
 
-      console.log('🔐 正在发送登录请求:', {
+      console.log("🔐 正在发送登录请求:", {
         endpoint: API_ENDPOINTS.AUTH.LOGIN,
-        data: { email, password: '***' }
+        data: { email, password: "***" },
       });
 
       const response = await httpClient.post<{
@@ -29,13 +29,15 @@ export class AuthService {
         data: AuthData;
       }>(API_ENDPOINTS.AUTH.LOGIN, loginData);
 
-      console.log('✅ 登录响应:', {
+      console.log("✅ 登录响应:", {
         status: response.status,
-        data: response.data
+        data: response.data,
       });
 
       // 从包装的响应中提取实际数据
       if (response.data.success && response.data.data) {
+        // 保存token到本地存储
+        localStorage.setItem("authToken", response.data.data.token);
         return response.data.data;
       } else {
         throw new Error("服务器返回数据格式错误");
@@ -52,10 +54,7 @@ export class AuthService {
    * @param password 密码
    * @returns Promise<AuthData> 认证响应
    */
-  static async register(
-    email: string,
-    password: string
-  ): Promise<AuthData> {
+  static async register(email: string, password: string): Promise<AuthData> {
     try {
       const registerData: RegisterRequest = { email, password };
 
