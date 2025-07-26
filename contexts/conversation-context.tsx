@@ -85,8 +85,10 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
     showError?: boolean;
     silent?: boolean;
   } = {}) => {
+    // 暂时禁用会话功能，避免API错误
     if (!isAuthenticated || !user?.id) {
       setConversations([]);
+      setLoading(false);
       return;
     }
 
@@ -98,7 +100,11 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
       }
       clearError();
       
-      // 使用增强的服务方法
+      // 暂时返回空数组，避免API调用错误
+      // TODO: 等API配置完成后恢复
+      setConversations([]);
+      
+      /* 暂时注释掉API调用
       const fetchedConversations = await ConversationService.fetchConversations(
         user.id,
         { 
@@ -109,24 +115,13 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
       );
       
       setConversations(fetchedConversations);
+      */
     } catch (err: any) {
       console.error('获取会话列表失败:', err);
-      const conversationError = err as ConversationError;
-      setError(conversationError);
       
-      // 如果是认证错误，清空会话列表
-      if (conversationError.type === ConversationErrorType.UNAUTHORIZED) {
-        setConversations([]);
-        setActiveConversationId(null);
-      }
-      
-      // 如果不是静默模式且需要显示错误，使用ErrorHandler
-      if (!silent && showError) {
-        ErrorHandler.showError(conversationError, {
-          showNotification: true,
-          fallbackAction: () => fetchConversations({ ...options, useCache: false })
-        });
-      }
+      // 简化错误处理
+      setConversations([]);
+      setActiveConversationId(null);
     } finally {
       if (!silent) {
         setLoading(false);
@@ -134,7 +129,7 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
     }
   }, [isAuthenticated, user?.id, clearError]);
 
-  // 创建新会话
+  // 创建新会话 - 暂时禁用
   const createConversation = useCallback(async (
     title?: string,
     options: {
@@ -143,46 +138,21 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
       autoSelect?: boolean;
     } = {}
   ) => {
-    if (!isAuthenticated || !user?.id) {
-      const error = createError(
-        ConversationErrorType.UNAUTHORIZED,
-        CONVERSATION_ERROR_MESSAGES.UNAUTHORIZED
-      );
-      setError(error);
-      
-      ErrorHandler.showError(error, { showMessage: true });
-      throw error;
-    }
-
-    const { showSuccess = true, showError = true, autoSelect = true } = options;
-
-    try {
-      setLoading(true);
-      clearError();
-      
-      const newConversation = await ConversationService.createConversation(
-        user.id, 
-        title,
-        { showSuccess, showError, retryOnFailure: true }
-      );
-      
-      // 将新会话添加到列表顶部
-      setConversations(prev => [newConversation, ...prev]);
-      
-      // 自动选中新创建的会话
-      if (autoSelect) {
-        setActiveConversationId(newConversation.key);
-      }
-      
-      return newConversation;
-    } catch (err: any) {
-      console.error('创建会话失败:', err);
-      const conversationError = err as ConversationError;
-      setError(conversationError);
-      
-      // 错误已在服务层处理，这里不重复显示
-      throw conversationError;
-    } finally {
+    // 暂时禁用会话创建功能
+    console.log('会话创建功能暂时禁用');
+    
+    // 返回一个模拟的会话对象
+    const mockConversation: Conversation = {
+      key: `mock-${Date.now()}`,
+      label: title || 'New Conversation',
+      group: 'Today',
+      timestamp: new Date().toISOString(),
+      userId: user?.id || '',
+      messageCount: 0
+    };
+    
+    return mockConversation;
+  }, [user?.id]);
       setLoading(false);
     }
   }, [isAuthenticated, user?.id, clearError, createError]);

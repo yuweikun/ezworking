@@ -30,9 +30,10 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <AuthProvider>
-          <ConversationProvider>
+          {/* 暂时禁用会话上下文，避免API错误 */}
+          {/* <ConversationProvider> */}
             {children}
-          </ConversationProvider>
+          {/* </ConversationProvider> */}
         </AuthProvider>
       </body>
     </html>
