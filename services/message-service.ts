@@ -43,8 +43,8 @@ export class MessageService {
       }
 
       const params: GetMessagesRequest = {
-        user_id: userId,
         session_id: sessionId
+        // 移除 user_id 参数，API 不支持
       };
 
       const response = await httpClient.get<GetMessagesResponse>(

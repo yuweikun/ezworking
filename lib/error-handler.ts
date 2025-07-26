@@ -1,5 +1,17 @@
 import React from 'react';
-import { message, notification } from 'antd';
+
+// 动态导入 antd，只在客户端使用
+let message: any;
+let notification: any;
+
+if (typeof window !== 'undefined') {
+  import('antd').then(antd => {
+    message = antd.message;
+    notification = antd.notification;
+  }).catch(() => {
+    // 忽略导入错误
+  });
+}
 import { ConversationError, ConversationErrorType } from '../types/conversation';
 import { ApiError } from '../types/auth';
 import { CONVERSATION_ERROR_MESSAGES } from '../types/constants';
@@ -62,16 +74,22 @@ export class ErrorHandler {
     const errorMessage = this.getErrorMessage(error);
     const errorTitle = this.getErrorTitle(error);
 
-    if (showNotification) {
-      notification.error({
-        message: errorTitle,
-        description: errorMessage,
-        duration: 6,
-        placement: 'topRight',
-        onClick: fallbackAction
-      });
-    } else if (showMessage) {
-      message.error(errorMessage, 4);
+    // 只在客户端显示通知
+    if (typeof window !== 'undefined') {
+      if (showNotification && notification) {
+        notification.error({
+          message: errorTitle,
+          description: errorMessage,
+          duration: 6,
+          placement: 'topRight',
+          onClick: fallbackAction
+        });
+      } else if (showMessage && message) {
+        message.error(errorMessage, 4);
+      }
+    } else {
+      // 服务端只记录日志
+      console.error(`[${errorTitle}] ${errorMessage}`, error);
     }
   }
 
@@ -81,15 +99,19 @@ export class ErrorHandler {
    * @param showNotification 是否显示通知
    */
   static showSuccess(successMessage: string, showNotification: boolean = false) {
-    if (showNotification) {
-      notification.success({
-        message: '操作成功',
-        description: successMessage,
-        duration: 3,
-        placement: 'topRight'
-      });
+    if (typeof window !== 'undefined') {
+      if (showNotification && notification) {
+        notification.success({
+          message: '操作成功',
+          description: successMessage,
+          duration: 3,
+          placement: 'topRight'
+        });
+      } else if (message) {
+        message.success(successMessage, 3);
+      }
     } else {
-      message.success(successMessage, 3);
+      console.log(`[成功] ${successMessage}`);
     }
   }
 
@@ -99,15 +121,19 @@ export class ErrorHandler {
    * @param showNotification 是否显示通知
    */
   static showWarning(warningMessage: string, showNotification: boolean = false) {
-    if (showNotification) {
-      notification.warning({
-        message: '注意',
-        description: warningMessage,
-        duration: 4,
-        placement: 'topRight'
-      });
+    if (typeof window !== 'undefined') {
+      if (showNotification && notification) {
+        notification.warning({
+          message: '注意',
+          description: warningMessage,
+          duration: 4,
+          placement: 'topRight'
+        });
+      } else if (message) {
+        message.warning(warningMessage, 3);
+      }
     } else {
-      message.warning(warningMessage, 3);
+      console.warn(`[警告] ${warningMessage}`);
     }
   }
 
@@ -424,23 +450,25 @@ export class ErrorHandler {
   static handleComponentError(error: Error, errorInfo: any) {
     console.error('Component Error:', error, errorInfo);
     
-    // 显示用户友好的错误信息
-    notification.error({
-      message: '页面出现错误',
-      description: '页面遇到了一些问题，请刷新页面重试',
-      duration: 0, // 不自动关闭
-      placement: 'topRight',
-      btn: React.createElement('button', {
-        onClick: () => window.location.reload(),
-        style: {
-          background: '#1677ff',
-          color: 'white',
-          border: 'none',
-          borderRadius: '4px',
-          padding: '4px 12px',
-          cursor: 'pointer'
-        }
-      }, '刷新页面')
-    });
+    // 只在客户端显示通知
+    if (typeof window !== 'undefined' && notification) {
+      notification.error({
+        message: '页面出现错误',
+        description: '页面遇到了一些问题，请刷新页面重试',
+        duration: 0, // 不自动关闭
+        placement: 'topRight',
+        btn: React.createElement('button', {
+          onClick: () => window.location.reload(),
+          style: {
+            background: '#1677ff',
+            color: 'white',
+            border: 'none',
+            borderRadius: '4px',
+            padding: '4px 12px',
+            cursor: 'pointer'
+          }
+        }, '刷新页面')
+      });
+    }
   }
 }

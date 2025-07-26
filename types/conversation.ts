@@ -95,8 +95,8 @@ export interface UpdateSessionRequest {
  * 获取消息历史请求
  */
 export interface GetMessagesRequest {
-  user_id: string;
   session_id: string;
+  // 移除 user_id，API 不支持此参数
 }
 
 /**

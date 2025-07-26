@@ -8,7 +8,7 @@ import { ConversationAgent } from '../../../../lib/ai/agents/conversation-agent'
 import { CareerPositioningWorkflow } from '../../../../lib/ai/workflows/career-positioning-workflow';
 import { getOpenAIConfig, validateOpenAIConfig } from '../../../../lib/ai/config';
 import { OpenAIMessage, WorkflowState, StreamChunk } from '../../../../lib/ai/types';
-import { createStreamResponse, collectStreamContent } from '../../../../lib/ai/stream-utils';
+import { createStreamResponse } from '../../../../lib/ai/stream-utils';
 
 
 /**
