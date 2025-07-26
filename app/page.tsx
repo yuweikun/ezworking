@@ -34,7 +34,17 @@ import {
   useXChat, // 聊天功能 Hook
 } from "@ant-design/x";
 // 导入 Ant Design 基础组件
-import { Button, Flex, type GetProp, Space, Spin, message, Modal } from "antd";
+import {
+  Button,
+  Flex,
+  type GetProp,
+  Space,
+  Spin,
+  message,
+  Modal,
+  App,
+  Input,
+} from "antd";
 import { createStyles } from "antd-style"; // 样式创建工具
 // import dayjs from 'dayjs';  // 日期处理库 - 暂时未使用
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -241,6 +251,7 @@ const useStyle = createStyles(({ token, css }) => {
 const Independent: React.FC = () => {
   const { styles } = useStyle(); // 获取样式
   const abortController = useRef<AbortController>(null); // 用于取消请求的控制器
+  const { modal } = App.useApp(); // 获取 modal 实例
 
   // ==================== 上下文集成 ====================
   const { isAuthenticated, user } = useAuth();
@@ -295,6 +306,15 @@ const Independent: React.FC = () => {
 
   // 网络状态
   const [isOnline, setIsOnline] = useState(true);
+
+  // 删除确认对话框状态
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [conversationToDelete, setConversationToDelete] = useState<any>(null);
+
+  // 重命名对话框状态
+  const [renameModalVisible, setRenameModalVisible] = useState(false);
+  const [conversationToRename, setConversationToRename] = useState<any>(null);
+  const [newConversationName, setNewConversationName] = useState("");
 
   // 监听网络状态变化
   useEffect(() => {
@@ -1101,9 +1121,16 @@ const Independent: React.FC = () => {
                     key: "delete",
                     icon: <DeleteOutlined />,
                     danger: true, // 危险操作样式
-                    onClick: () => {
-                      // 显示删除确认对话框
-                      Modal.confirm({
+                  },
+                ],
+                onClick: ({ key }) => {
+                  console.log("菜单点击事件触发:", key); // 添加调试日志
+                  if (key === "delete") {
+                    console.log("准备显示删除确认对话框"); // 添加调试日志
+
+                    // 尝试使用 modal.confirm
+                    try {
+                      modal.confirm({
                         title: "确认删除会话",
                         content: `确定要删除会话"${
                           typeof conversation.label === "string"
@@ -1143,9 +1170,24 @@ const Independent: React.FC = () => {
                           }
                         },
                       });
-                    },
-                  },
-                ],
+                    } catch (error) {
+                      console.error("Modal.confirm 失败:", error);
+                      // 备选方案：使用状态控制的 Modal
+                      setConversationToDelete(conversation);
+                      setDeleteModalVisible(true);
+                    }
+                  } else if (key === "rename") {
+                    // 实现重命名功能
+                    console.log("重命名会话:", conversation.key);
+                    setConversationToRename(conversation);
+                    setNewConversationName(
+                      typeof conversation.label === "string"
+                        ? conversation.label
+                        : "未命名会话"
+                    );
+                    setRenameModalVisible(true);
+                  }
+                },
               })}
             />
           </div>
@@ -1444,6 +1486,118 @@ const Independent: React.FC = () => {
           </ErrorBoundary>
         </div>
       </div>
+
+      {/* 备选删除确认对话框 */}
+      <Modal
+        title="确认删除会话"
+        open={deleteModalVisible}
+        onOk={async () => {
+          if (conversationToDelete) {
+            setOperationLoading((prev) => ({
+              ...prev,
+              deleting: conversationToDelete.key,
+            }));
+
+            try {
+              await deleteConversation(conversationToDelete.key, {
+                showSuccess: true,
+                showError: true,
+                optimistic: true,
+              });
+              // 如果删除的是当前活跃会话，清空消息历史
+              if (conversationToDelete.key === activeConversationId) {
+                setMessages([]);
+              }
+              clearError(); // 清除任何现有错误
+              setDeleteModalVisible(false);
+              setConversationToDelete(null);
+            } catch (error: any) {
+              console.error("删除会话失败:", error);
+              // 错误已在context中处理，这里不需要重复显示
+            } finally {
+              setOperationLoading((prev) => ({
+                ...prev,
+                deleting: null,
+              }));
+            }
+          }
+        }}
+        onCancel={() => {
+          setDeleteModalVisible(false);
+          setConversationToDelete(null);
+        }}
+        okText="删除"
+        okType="danger"
+        cancelText="取消"
+      >
+        <p>
+          确定要删除会话"
+          {typeof conversationToDelete?.label === "string"
+            ? conversationToDelete.label
+            : "未命名会话"}
+          "吗？此操作无法撤销。
+        </p>
+      </Modal>
+
+      {/* 重命名对话框 */}
+      <Modal
+        title="重命名会话"
+        open={renameModalVisible}
+        onOk={async () => {
+          if (conversationToRename && newConversationName.trim()) {
+            try {
+              await updateConversation(conversationToRename.key, {
+                label: newConversationName.trim(),
+              });
+              message.success("会话重命名成功");
+              setRenameModalVisible(false);
+              setConversationToRename(null);
+              setNewConversationName("");
+            } catch (error: any) {
+              console.error("重命名会话失败:", error);
+              message.error("重命名失败，请重试");
+            }
+          } else {
+            message.warning("请输入有效的会话名称");
+          }
+        }}
+        onCancel={() => {
+          setRenameModalVisible(false);
+          setConversationToRename(null);
+          setNewConversationName("");
+        }}
+        okText="确认"
+        cancelText="取消"
+      >
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ display: "block", marginBottom: 8, fontWeight: 500 }}>
+            新的会话名称：
+          </label>
+          <Input
+            value={newConversationName}
+            onChange={(e) => setNewConversationName(e.target.value)}
+            placeholder="请输入会话名称"
+            maxLength={50}
+            showCount
+            onPressEnter={async () => {
+              if (conversationToRename && newConversationName.trim()) {
+                try {
+                  await updateConversation(conversationToRename.key, {
+                    label: newConversationName.trim(),
+                  });
+                  message.success("会话重命名成功");
+                  setRenameModalVisible(false);
+                  setConversationToRename(null);
+                  setNewConversationName("");
+                } catch (error: any) {
+                  console.error("重命名会话失败:", error);
+                  message.error("重命名失败，请重试");
+                }
+              }
+            }}
+          />
+        </div>
+      </Modal>
     </ErrorBoundary>
   );
 };
