@@ -441,6 +441,7 @@ const Independent: React.FC = () => {
           ...curWorkflowState,
           content: fullContent,
           role: "assistant",
+          onSubmit: onSubmit,
         });
       };
     } catch (error) {

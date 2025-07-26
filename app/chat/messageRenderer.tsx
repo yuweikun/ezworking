@@ -104,9 +104,23 @@ export const CustomMessageRenderer = ({ message }: { Message }) => {
 
     const handleFormSubmit = (values: any) => {
       console.log("表单提交:", values);
+      // 整理表单值为字符串格式，使用label作为键名
+      const formattedValues = formFields
+        .map((field) => {
+          const value = values[field.name];
+          if (value === undefined || value === null || value === "") {
+            return `${field.label}: 未填写`;
+          }
+          if (Array.isArray(value)) {
+            return `${field.label}: ${value.join(", ")}`;
+          }
+          return `${field.label}: ${value}`;
+        })
+        .join("\n");
+
       // 触发下一次对话
       if (message.onSubmit) {
-        message.onSubmit(values);
+        message.onSubmit(formattedValues);
       }
     };
 
@@ -154,7 +168,8 @@ export const CustomMessageRenderer = ({ message }: { Message }) => {
     const handleOptionSelect = (selectedKey: string) => {
       console.log(`用户选择了选项 ${selectedKey}`);
       if (message.onSubmit) {
-        message.onSubmit({ selectedKey });
+        console.log("调用 message.onSubmit");
+        message.onSubmit(qaData[selectedKey]);
       }
     };
 
