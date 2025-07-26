@@ -9,7 +9,8 @@ export async function middleware(request: NextRequest) {
   // 只对需要认证的API路由应用中间件
   const protectedPaths = [
     '/api/sessions',
-    '/api/messages'
+    '/api/messages',
+    '/api/ai/stream'
   ];
 
   const pathname = request.nextUrl.pathname;
@@ -108,8 +109,10 @@ export const config = {
      * 匹配需要认证的API路由:
      * - /api/sessions/*
      * - /api/messages/*
+     * - /api/ai/*
      */
     '/api/sessions/:path*',
-    '/api/messages/:path*'
+    '/api/messages/:path*',
+    '/api/ai/:path*'
   ],
 };
