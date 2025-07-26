@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
-import { validateRegisterRequest, validateRequestBody } from '@/lib/utils/validation';
-import { createSuccessResponse, createErrorResponse, createValidationErrorResponse, handleApiError, validateMethod } from '@/lib/utils/response';
-import type { RegisterRequest } from '@/lib/types';
+import { createServerSupabaseClient } from '../../../../lib/supabase';
+import { validateRegisterRequest, validateRequestBody } from '../../../../lib/utils/validation';
+import { createSuccessResponse, createErrorResponse, createValidationErrorResponse, handleApiError, validateMethod } from '../../../../lib/utils/response';
+import type { RegisterRequest } from '../../../../lib/types';
 
 export async function POST(request: NextRequest) {
   try {
@@ -47,20 +47,33 @@ export async function POST(request: NextRequest) {
       return createErrorResponse('INTERNAL_ERROR', '用户注册失败');
     }
 
-    // 返回成功响应（不包含敏感信息）
+    // 处理邮箱确认的情况
+    if (!data.session) {
+      // 如果没有session，说明需要邮箱确认
+      return createSuccessResponse({
+        message: '注册成功，请检查您的邮箱并点击确认链接完成注册',
+        requiresEmailConfirmation: true,
+        user: {
+          id: data.user.id,
+          email: data.user.email || ''
+        }
+      }, 201);
+    }
+
+    // 返回成功响应（符合前端期望的数据结构）
     const responseData = {
+      token: data.session.access_token,
       user: {
         id: data.user.id,
-        email: data.user.email,
-        created_at: data.user.created_at,
-        email_confirmed_at: data.user.email_confirmed_at
+        email: data.user.email || ''
       },
-      session: data.session ? {
+      // 额外的会话信息（可选）
+      session: {
         access_token: data.session.access_token,
         refresh_token: data.session.refresh_token,
         expires_at: data.session.expires_at,
         token_type: data.session.token_type
-      } : null
+      }
     };
 
     return createSuccessResponse(responseData, 201);

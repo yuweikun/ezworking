@@ -528,16 +528,25 @@ function AuthForm({ mode, onClose }: AuthFormProps) {
     try {
       if (mode === 'login') {
         await login(email, password);
+        // 登录成功后关闭弹窗
+        onClose();
+        resetForm();
       } else {
         await register(email, password);
+        // 注册成功后关闭弹窗
+        onClose();
+        resetForm();
       }
-      
-      // 成功后关闭弹窗
-      onClose();
-      resetForm();
     } catch (error: any) {
       console.error(`${mode} error:`, error);
-      setSubmitError(error.message || `${mode === 'login' ? '登录' : '注册'}失败，请重试`);
+      
+      // 特殊处理邮箱确认的情况
+      if (error.requiresEmailConfirmation) {
+        setSubmitError(error.message);
+        // 邮箱确认情况下不关闭弹窗，让用户看到提示信息
+      } else {
+        setSubmitError(error.message || `${mode === 'login' ? '登录' : '注册'}失败，请重试`);
+      }
     } finally {
       setIsSubmitting(false);
     }

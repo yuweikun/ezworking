@@ -1,29 +1,29 @@
 import { NextRequest } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { createServerSupabaseClient } from '../../../lib/supabase';
 import { 
   createSuccessResponse, 
   createErrorResponse, 
   createValidationErrorResponse,
   handleApiError, 
   validateMethod 
-} from '@/lib/utils/response';
+} from '../../../lib/utils/response';
 import { 
   validateQueryParams, 
   validateMessageRequest, 
   validateUUID,
   validateRequestBody
-} from '@/lib/utils/validation';
+} from '../../../lib/utils/validation';
 import { 
   withAuth, 
   checkSessionPermission 
-} from '@/lib/utils/auth';
+} from '../../../lib/utils/auth';
 import { 
   cachedMessageHistory, 
   cachedSessionPermissionCheck,
   cacheInvalidation,
   cacheHeaders 
-} from '@/lib/utils/cache';
-import { MessageHistory } from '@/lib/types';
+} from '../../../lib/utils/cache';
+import { MessageHistory } from '../../../lib/types';
 import type { User } from '@supabase/supabase-js';
 
 /**

@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
-import { validateLoginRequest, validateRequestBody } from '@/lib/utils/validation';
-import { createSuccessResponse, createErrorResponse, createValidationErrorResponse, handleApiError, validateMethod } from '@/lib/utils/response';
-import type { LoginRequest } from '@/lib/types';
+import { createServerSupabaseClient } from '../../../../lib/supabase';
+import { validateLoginRequest, validateRequestBody } from '../../../../lib/utils/validation';
+import { createSuccessResponse, createErrorResponse, createValidationErrorResponse, handleApiError, validateMethod } from '../../../../lib/utils/response';
+import type { LoginRequest } from '../../../../lib/types';
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,25 +42,20 @@ export async function POST(request: NextRequest) {
       return createErrorResponse('LOGIN_FAILED');
     }
 
-    // 返回成功响应（包含认证令牌）
+    // 返回成功响应（符合前端期望的数据结构）
     const responseData = {
+      token: data.session.access_token,
       user: {
         id: data.user.id,
-        email: data.user.email,
-        created_at: data.user.created_at,
-        last_sign_in_at: data.user.last_sign_in_at,
-        email_confirmed_at: data.user.email_confirmed_at
+        email: data.user.email || ''
       },
+      // 额外的会话信息（可选）
       session: {
         access_token: data.session.access_token,
         refresh_token: data.session.refresh_token,
         expires_at: data.session.expires_at,
         expires_in: data.session.expires_in,
-        token_type: data.session.token_type,
-        user: {
-          id: data.session.user.id,
-          email: data.session.user.email
-        }
+        token_type: data.session.token_type
       }
     };
 

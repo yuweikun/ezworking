@@ -1,14 +1,14 @@
 import { NextRequest } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
-import { createSuccessResponse, createErrorResponse, createValidationErrorResponse, handleApiError, validateMethod } from '@/lib/utils/response';
-import { validateSessionRequest, validateRequestBody } from '@/lib/utils/validation';
-import { withAuth } from '@/lib/utils/auth';
+import { createServerSupabaseClient } from '../../../lib/supabase';
+import { createSuccessResponse, createErrorResponse, createValidationErrorResponse, handleApiError, validateMethod } from '../../../lib/utils/response';
+import { validateSessionRequest, validateRequestBody } from '../../../lib/utils/validation';
+import { withAuth } from '../../../lib/utils/auth';
 import { 
   cachedUserSessions, 
   cacheInvalidation,
   cacheHeaders 
-} from '@/lib/utils/cache';
-import { ChatSession, SessionCreateRequest } from '@/lib/types';
+} from '../../../lib/utils/cache';
+import { ChatSession, SessionCreateRequest } from '../../../lib/types';
 import type { User } from '@supabase/supabase-js';
 
 /**

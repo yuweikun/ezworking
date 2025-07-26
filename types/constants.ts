@@ -16,6 +16,7 @@ export const ERROR_MESSAGES = {
 
 // API 端点常量
 export const API_ENDPOINTS = {
-  LOGIN: '/api/auth/login',
-  REGISTER: '/api/auth/register'
+  LOGIN: '/auth/login',
+  REGISTER: '/auth/register',
+  RESEND_CONFIRMATION: '/auth/resend-confirmation'
 } as const;

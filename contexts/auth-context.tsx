@@ -135,7 +135,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
       setIsAuthenticated(true);
       setUser(response.user);
     } catch (error: any) {
-      // 确保在错误情况下清除可能的部分数据
+      // 检查是否是邮箱确认错误
+      if (error.requiresEmailConfirmation) {
+        // 邮箱确认错误不清除状态，只是抛出错误让UI处理
+        throw error;
+      }
+      
+      // 其他错误情况下清除可能的部分数据
       TokenManager.clearAuth();
       setIsAuthenticated(false);
       setUser(null);
