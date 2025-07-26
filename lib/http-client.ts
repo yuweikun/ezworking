@@ -20,7 +20,7 @@ httpClient.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-    
+
     return config;
   },
   (error) => {
@@ -36,7 +36,7 @@ httpClient.interceptors.response.use(
   },
   (error: AxiosError) => {
     console.error('响应错误:', error.response?.status, error.config?.url);
-    
+
     // 统一错误处理
     const apiError = handleApiError(error);
     return Promise.reject(apiError);
@@ -55,25 +55,16 @@ function handleApiError(error: AxiosError): ApiError {
 
   const { status, data } = error.response;
 
-  // 处理我们的API错误响应格式
-  if (data && typeof data === 'object' && 'error' in data && 'message' in data) {
-    const apiErrorData = data as any;
-    
-    // 清除认证信息（如果是认证相关错误）
-    if (status === 401) {
-      localStorage.removeItem('auth_token');
-      localStorage.removeItem('user_info');
-    }
-    
-    return {
-      message: apiErrorData.message,
-      code: apiErrorData.error || 'API_ERROR'
-    };
-  }
-
-  // 根据HTTP状态码处理错误（兜底处理）
+  // 根据HTTP状态码处理错误
   switch (status) {
     case 400:
+      // 处理验证错误
+      if (data && typeof data === 'object' && 'message' in data) {
+        return {
+          message: data.message as string,
+          code: 'VALIDATION_ERROR'
+        };
+      }
       return {
         message: ERROR_MESSAGES.INVALID_CREDENTIALS,
         code: 'BAD_REQUEST'
@@ -96,6 +87,13 @@ function handleApiError(error: AxiosError): ApiError {
       };
 
     case 422:
+      // 处理表单验证错误
+      if (data && typeof data === 'object' && 'message' in data) {
+        return {
+          message: data.message as string,
+          code: 'VALIDATION_ERROR'
+        };
+      }
       return {
         message: ERROR_MESSAGES.INVALID_EMAIL,
         code: 'VALIDATION_ERROR'

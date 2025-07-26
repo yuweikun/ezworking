@@ -1,5 +1,9 @@
 // Jest setup file
 import { jest } from '@jest/globals'
+import { config } from 'dotenv'
+
+// Load environment variables from .env.local
+config({ path: '.env.local' })
 
 // Mock environment variables
 process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'

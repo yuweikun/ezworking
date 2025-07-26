@@ -12,14 +12,26 @@
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
-    "test:ci": "jest --ci --coverage --watchAll=false"
+    "test:ci": "jest --ci --coverage --watchAll=false",
+    "test:coordinator": "npx tsx lib/ai/examples/test-coordinator.ts",
+    "test:stream": "npx tsx lib/ai/examples/real-stream-test.ts",
+    "test:stream:list": "npx tsx lib/ai/examples/real-stream-test.ts --list",
+    "test:api": "npx tsx lib/ai/examples/api-stream-test.ts",
+    "test:api:list": "npx tsx lib/ai/examples/api-stream-test.ts --list",
+    "demo:quick": "npx tsx lib/ai/examples/quick-demo.ts",
+    "test:workflow": "npx tsx lib/ai/examples/workflow-simulation.ts",
+    "test:workflow:quick": "npx tsx lib/ai/examples/workflow-simulation.ts --quick",
+    "setup:api-key": "node scripts/setup-api-key.js"
   },
   "dependencies": {
     "@ant-design/x": "^1.5.0",
     "@supabase/supabase-js": "^2.52.1",
     "antd-style": "^3.7.1",
     "axios": "^1.11.0",
+    "dotenv": "^17.2.1",
     "next": "15.4.4",
+    "node-fetch": "^3.3.2",
+    "openai": "^5.10.2",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },
@@ -27,6 +39,7 @@
     "@tailwindcss/postcss": "^4",
     "@types/jest": "^30.0.0",
     "@types/node": "^20",
+    "@types/node-fetch": "^2.6.12",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/supertest": "^6.0.3",
@@ -34,6 +47,8 @@
     "supertest": "^7.1.4",
     "tailwindcss": "^4",
     "ts-jest": "^29.4.0",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.3",
     "typescript": "^5"
   }
 }

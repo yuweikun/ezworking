@@ -199,6 +199,94 @@ export class MessageService {
   }
 
   /**
+   * 获取会话的工作流状态（从最后一条assistant消息中获取）
+   * @param userId 用户ID
+   * @param sessionId 会话ID
+   * @returns Promise<any | null> 工作流状态或null
+   */
+  static async getWorkflowState(userId: string, sessionId: string): Promise<any | null> {
+    try {
+      const messages = await this.fetchMessages(userId, sessionId, { 
+        showError: false, 
+        retryOnFailure: false 
+      });
+      
+      // 从后往前查找最后一条assistant消息
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const message = messages[i];
+        if (message.role === 'assistant' && message.workflow_stage) {
+          try {
+            return JSON.parse(message.workflow_stage);
+          } catch (parseError) {
+            console.warn('Failed to parse workflow_stage JSON:', parseError);
+            continue; // 继续查找上一条消息
+          }
+        }
+      }
+      
+      return null;
+    } catch (error) {
+      console.warn('Failed to get workflow state:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 获取会话的工作流状态（从最后一条消息中获取，兼容旧逻辑）
+   * @param userId 用户ID
+   * @param sessionId 会话ID
+   * @returns Promise<any | null> 工作流状态或null
+   * @deprecated 使用 getWorkflowState 替代
+   */
+  static async getLastMessageWorkflowState(userId: string, sessionId: string): Promise<any | null> {
+    try {
+      const lastMessage = await this.getLastMessage(userId, sessionId);
+      if (lastMessage?.workflow_stage) {
+        return JSON.parse(lastMessage.workflow_stage);
+      }
+      return null;
+    } catch (error) {
+      console.warn('Failed to get last message workflow state:', error);
+      return null;
+    }
+  }
+
+  /**
+   * 格式化消息历史为OpenAI消息格式
+   * @param userId 用户ID
+   * @param sessionId 会话ID
+   * @param excludeLastUserMessage 是否排除最后一条用户消息（避免重复）
+   * @returns Promise<OpenAIMessage[]> OpenAI格式的消息历史
+   */
+  static async formatMessagesForOpenAI(
+    userId: string, 
+    sessionId: string,
+    excludeLastUserMessage: boolean = false
+  ): Promise<Array<{ role: 'user' | 'assistant'; content: string }>> {
+    try {
+      const messages = await this.fetchMessages(userId, sessionId);
+      
+      let filteredMessages = messages;
+      
+      // 如果需要排除最后一条用户消息
+      if (excludeLastUserMessage && messages.length > 0) {
+        const lastMessage = messages[messages.length - 1];
+        if (lastMessage.role === 'user') {
+          filteredMessages = messages.slice(0, -1);
+        }
+      }
+      
+      return filteredMessages.map(msg => ({
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content
+      }));
+    } catch (error) {
+      console.warn('Failed to format messages for OpenAI:', error);
+      return [];
+    }
+  }
+
+  /**
    * 处理API错误并转换为ConversationError
    * @param error 原始错误
    * @param defaultType 默认错误类型
