@@ -6,27 +6,27 @@ import { StorageUtils } from './storage-utils';
 export class TokenManager {
   // 保存认证token
   static setToken(token: string): void {
-    StorageUtils.setItem(STORAGE_KEYS.TOKEN, token);
+    StorageUtils.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
   }
 
   // 获取认证token
   static getToken(): string | null {
-    return StorageUtils.getItem(STORAGE_KEYS.TOKEN);
+    return StorageUtils.getItem(STORAGE_KEYS.AUTH_TOKEN);
   }
 
   // 移除认证token
   static removeToken(): void {
-    StorageUtils.removeItem(STORAGE_KEYS.TOKEN);
+    StorageUtils.removeItem(STORAGE_KEYS.AUTH_TOKEN);
   }
 
   // 保存用户信息
   static setUser(user: UserInfo): void {
-    StorageUtils.setItem(STORAGE_KEYS.USER, JSON.stringify(user));
+    StorageUtils.setItem(STORAGE_KEYS.USER_INFO, JSON.stringify(user));
   }
 
   // 获取用户信息
   static getUser(): UserInfo | null {
-    const userStr = StorageUtils.getItem(STORAGE_KEYS.USER);
+    const userStr = StorageUtils.getItem(STORAGE_KEYS.USER_INFO);
     if (!userStr) return null;
     
     try {
@@ -34,14 +34,14 @@ export class TokenManager {
     } catch (error) {
       console.error('解析用户信息失败:', error);
       // 如果解析失败，清除无效数据
-      StorageUtils.removeItem(STORAGE_KEYS.USER);
+      StorageUtils.removeItem(STORAGE_KEYS.USER_INFO);
       return null;
     }
   }
 
   // 移除用户信息
   static removeUser(): void {
-    StorageUtils.removeItem(STORAGE_KEYS.USER);
+    StorageUtils.removeItem(STORAGE_KEYS.USER_INFO);
   }
 
   // 清除所有认证信息

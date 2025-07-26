@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>菜单修复测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>菜单修复测试</h1>
+    
+    <div class="section info">
+        <h3>测试说明</h3>
+        <p>这个页面用于验证前端菜单修复是否有效</p>
+        <p>修复内容：</p>
+        <ul>
+            <li>将菜单项的onClick移动到菜单配置的根级别</li>
+            <li>添加统一的onClick处理函数</li>
+            <li>添加事件冒泡阻止</li>
+            <li>分离重命名和删除处理逻辑</li>
+        </ul>
+    </div>
+    
+    <div class="section">
+        <h3>测试步骤</h3>
+        <ol>
+            <li>确保用户已登录</li>
+            <li>确保有会话数据</li>
+            <li>在主应用中右键点击会话项</li>
+            <li>查看是否出现菜单</li>
+            <li>点击菜单项查看是否有反应</li>
+            <li>查看浏览器控制台的调试日志</li>
+        </ol>
+    </div>
+    
+    <div class="section">
+        <h3>预期行为</h3>
+        <ul>
+            <li>右键点击会话项应该显示菜单</li>
+            <li>点击"Rename"应该弹出输入框</li>
+            <li>点击"Delete"应该弹出确认对话框</li>
+            <li>控制台应该显示调试日志：
+                <ul>
+                    <li><code>🎯 菜单点击:</code></li>
+                    <li><code>🔄 处理重命名会话:</code></li>
+                    <li><code>🗑️ 处理删除会话:</code></li>
+                </ul>
+            </li>
+        </ul>
+    </div>
+    
+    <div class="section">
+        <h3>快速准备</h3>
+        <button onclick="quickSetup()">快速设置（登录+创建会话）</button>
+        <div id="setup-result"></div>
+    </div>
+    
+    <div class="section">
+        <h3>调试信息</h3>
+        <button onclick="checkStatus()">检查状态</button>
+        <div id="debug-info"></div>
+    </div>
+
+    <script>
+        async function quickSetup() {
+            document.getElementById('setup-result').innerHTML = '<div class="info">正在设置...</div>';
+            
+            try {
+                // 1. 登录
+                const loginResponse = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: 'test@example.com', password: '123456' })
+                });
+                
+                const loginData = await loginResponse.json();
+                if (!loginData.success) {
+                    throw new Error('登录失败: ' + loginData.message);
+                }
+                
+                localStorage.setItem('auth_token', loginData.data.token);
+                localStorage.setItem('user_info', JSON.stringify(loginData.data.user));
+                
+                // 2. 创建测试会话
+                const sessionResponse = await fetch('/api/sessions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${loginData.data.token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ title: '菜单测试会话 ' + new Date().toLocaleTimeString() })
+                });
+                
+                const sessionData = await sessionResponse.json();
+                if (!sessionData.success) {
+                    throw new Error('创建会话失败: ' + sessionData.message);
+                }
+                
+                document.getElementById('setup-result').innerHTML = 
+                    '<div class="success">✅ 设置完成！<br>已登录用户: ' + loginData.data.user.email + '<br>已创建会话: ' + sessionData.data.title + '</div>';
+                
+            } catch (error) {
+                document.getElementById('setup-result').innerHTML = 
+                    '<div class="error">❌ 设置失败: ' + error.message + '</div>';
+            }
+        }
+        
+        function checkStatus() {
+            const token = localStorage.getItem('auth_token');
+            const userInfo = localStorage.getItem('user_info');
+            
+            let html = '<h4>认证状态:</h4>';
+            if (token && userInfo) {
+                try {
+                    const user = JSON.parse(userInfo);
+                    html += '<div class="success">✅ 已登录: ' + user.email + '</div>';
+                } catch (e) {
+                    html += '<div class="error">❌ 用户信息解析失败</div>';
+                }
+            } else {
+                html += '<div class="error">❌ 未登录</div>';
+            }
+            
+            html += '<h4>下一步:</h4>';
+            html += '<p>1. 访问主应用: <a href="http://localhost:3000" target="_blank">http://localhost:3000</a></p>';
+            html += '<p>2. 右键点击任意会话项</p>';
+            html += '<p>3. 点击菜单项测试功能</p>';
+            html += '<p>4. 查看浏览器控制台的调试日志</p>';
+            
+            document.getElementById('debug-info').innerHTML = html;
+        }
+        
+        window.onload = function() {
+            checkStatus();
+        };
+    </script>
+</body>
+</html>

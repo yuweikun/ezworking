@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>测试前端认证</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        input { padding: 8px; margin: 5px; width: 200px; }
+    </style>
+</head>
+<body>
+    <h1>前端认证状态测试</h1>
+    
+    <div class="section info">
+        <h3>当前存储状态</h3>
+        <div id="storage-status"></div>
+        <button onclick="checkStorage()">检查存储</button>
+        <button onclick="clearStorage()">清除存储</button>
+    </div>
+    
+    <div class="section">
+        <h3>登录测试</h3>
+        <div>
+            <input type="email" id="email" placeholder="邮箱" value="test@example.com">
+            <input type="password" id="password" placeholder="密码" value="123456">
+            <button onclick="testLogin()">登录</button>
+        </div>
+        <div id="login-result"></div>
+    </div>
+    
+    <div class="section">
+        <h3>会话API测试</h3>
+        <button onclick="testSessionsAPI()">获取会话列表</button>
+        <button onclick="createTestSession()">创建测试会话</button>
+        <div id="sessions-result"></div>
+    </div>
+    
+    <div class="section">
+        <h3>网络请求日志</h3>
+        <div id="request-log"></div>
+        <button onclick="clearLog()">清除日志</button>
+    </div>
+
+    <script>
+        let requestLog = [];
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            requestLog.push(`[${timestamp}] ${message}`);
+            updateRequestLog();
+            console.log(message);
+        }
+        
+        function updateRequestLog() {
+            document.getElementById('request-log').innerHTML = 
+                '<pre>' + requestLog.slice(-10).join('\n') + '</pre>';
+        }
+        
+        function clearLog() {
+            requestLog = [];
+            updateRequestLog();
+        }
+        
+        function checkStorage() {
+            const token = localStorage.getItem('auth_token');
+            const userInfo = localStorage.getItem('user_info');
+            
+            let html = '<pre>';
+            html += 'auth_token: ' + (token ? token.substring(0, 50) + '...' : 'null') + '\n';
+            html += 'user_info: ' + (userInfo || 'null') + '\n';
+            html += '</pre>';
+            
+            document.getElementById('storage-status').innerHTML = html;
+            log('存储状态检查完成');
+        }
+        
+        function clearStorage() {
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user_info');
+            checkStorage();
+            log('存储已清除');
+        }
+        
+        async function testLogin() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            log(`尝试登录: ${email}`);
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                log(`登录响应: ${response.status} - ${JSON.stringify(data)}`);
+                
+                if (response.ok && data.success && data.data.token) {
+                    // 保存认证信息
+                    localStorage.setItem('auth_token', data.data.token);
+                    localStorage.setItem('user_info', JSON.stringify(data.data.user));
+                    
+                    document.getElementById('login-result').innerHTML = 
+                        '<div class="success">登录成功！Token已保存到localStorage</div>';
+                    
+                    checkStorage();
+                } else {
+                    document.getElementById('login-result').innerHTML = 
+                        '<div class="error">登录失败: ' + (data.message || '未知错误') + '</div>';
+                }
+            } catch (error) {
+                log(`登录错误: ${error.message}`);
+                document.getElementById('login-result').innerHTML = 
+                    '<div class="error">登录请求失败: ' + error.message + '</div>';
+            }
+        }
+        
+        async function testSessionsAPI() {
+            const token = localStorage.getItem('auth_token');
+            
+            if (!token) {
+                document.getElementById('sessions-result').innerHTML = 
+                    '<div class="error">没有找到认证token，请先登录</div>';
+                return;
+            }
+            
+            log('测试会话API...');
+            
+            try {
+                const response = await fetch('/api/sessions', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                log(`会话API响应: ${response.status} - ${JSON.stringify(data)}`);
+                
+                if (response.ok) {
+                    document.getElementById('sessions-result').innerHTML = 
+                        '<div class="success">会话API调用成功！<pre>' + JSON.stringify(data, null, 2) + '</pre></div>';
+                } else {
+                    document.getElementById('sessions-result').innerHTML = 
+                        '<div class="error">会话API调用失败: ' + (data.message || '未知错误') + '<pre>' + JSON.stringify(data, null, 2) + '</pre></div>';
+                }
+            } catch (error) {
+                log(`会话API错误: ${error.message}`);
+                document.getElementById('sessions-result').innerHTML = 
+                    '<div class="error">会话API请求失败: ' + error.message + '</div>';
+            }
+        }
+        
+        async function createTestSession() {
+            const token = localStorage.getItem('auth_token');
+            
+            if (!token) {
+                document.getElementById('sessions-result').innerHTML = 
+                    '<div class="error">没有找到认证token，请先登录</div>';
+                return;
+            }
+            
+            log('创建测试会话...');
+            
+            try {
+                const response = await fetch('/api/sessions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ title: '测试会话 ' + new Date().toLocaleTimeString() })
+                });
+                
+                const data = await response.json();
+                log(`创建会话响应: ${response.status} - ${JSON.stringify(data)}`);
+                
+                if (response.ok) {
+                    document.getElementById('sessions-result').innerHTML = 
+                        '<div class="success">会话创建成功！<pre>' + JSON.stringify(data, null, 2) + '</pre></div>';
+                } else {
+                    document.getElementById('sessions-result').innerHTML = 
+                        '<div class="error">会话创建失败: ' + (data.message || '未知错误') + '<pre>' + JSON.stringify(data, null, 2) + '</pre></div>';
+                }
+            } catch (error) {
+                log(`创建会话错误: ${error.message}`);
+                document.getElementById('sessions-result').innerHTML = 
+                    '<div class="error">创建会话请求失败: ' + error.message + '</div>';
+            }
+        }
+        
+        // 页面加载时检查存储状态
+        window.onload = function() {
+            checkStorage();
+            log('页面加载完成');
+        };
+    </script>
+</body>
+</html>

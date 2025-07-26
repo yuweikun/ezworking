@@ -1,207 +1,172 @@
-import { NextRequest } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
-import { createErrorResponse } from './response';
-import type { User } from '@supabase/supabase-js';
+import { NextRequest } from "next/server";
+import { createServerSupabaseClient } from "../supabase";
+import { createErrorResponse } from "./response";
+
+/**
+ * 用户认证信息接口
+ */
+export interface AuthUser {
+  id: string;
+  email: string;
+}
 
 /**
  * 认证结果接口
  */
 export interface AuthResult {
   success: boolean;
-  user?: User;
-  error?: string;
-  status?: number;
+  user?: AuthUser | null;
+  error?: string | null;
 }
 
 /**
- * 从请求头中提取JWT令牌
+ * 验证用户认证状态
  */
-export function extractTokenFromRequest(request: NextRequest): string | null {
-  const authHeader = request.headers.get('authorization');
-  
-  if (!authHeader) {
-    return null;
-  }
-
-  // 支持 "Bearer token" 格式
-  if (authHeader.startsWith('Bearer ')) {
-    return authHeader.substring(7);
-  }
-
-  // 直接返回令牌
-  return authHeader;
-}
-
-/**
- * 验证JWT令牌并获取用户信息
- */
-export async function verifyToken(token: string): Promise<AuthResult> {
+export async function verifyAuth(request: NextRequest): Promise<AuthResult> {
   try {
     const supabase = createServerSupabaseClient();
-    
-    // 使用Supabase验证JWT令牌
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    
+
+    // 从请求头获取认证令牌
+    const authHeader = request.headers.get("authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return {
+        success: false,
+        error: "Missing or invalid authorization header",
+      };
+    }
+
+    const token = authHeader.substring(7); // 移除 "Bearer " 前缀
+
+    // 验证令牌
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser(token);
+
     if (error || !user) {
       return {
         success: false,
-        error: '无效的认证令牌',
-        status: 401
+        error: "Invalid or expired token",
       };
     }
 
     return {
       success: true,
-      user
+      user: {
+        id: user.id,
+        email: user.email || "",
+      },
     };
   } catch (error) {
     return {
       success: false,
-      error: '令牌验证失败',
-      status: 401
+      error: "Authentication verification failed",
     };
   }
 }
 
 /**
- * 认证中间件 - 验证请求中的JWT令牌
+ * 中间件：验证用户权限访问会话
  */
-export async function authenticateRequest(request: NextRequest): Promise<AuthResult> {
-  const token = extractTokenFromRequest(request);
-  
-  if (!token) {
-    return {
-      success: false,
-      error: '缺少认证令牌',
-      status: 401
-    };
-  }
-
-  return await verifyToken(token);
-}
-
-/**
- * 检查用户是否有权限访问指定的会话
- */
-export async function checkSessionPermission(
-  userId: string, 
-  sessionId: string
-): Promise<{ hasPermission: boolean; error?: string; status?: number }> {
+export async function verifySessionAccess(
+  sessionId: string,
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = createServerSupabaseClient();
-    
-    // 查询会话是否存在且属于该用户
+
     const { data: session, error } = await supabase
-      .from('chat_sessions')
-      .select('id, user_id')
-      .eq('id', sessionId)
-      .eq('user_id', userId)
+      .from("chat_sessions")
+      .select("user_id")
+      .eq("id", sessionId)
       .single();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return {
-          hasPermission: false,
-          error: '无权访问此会话',
-          status: 403
-        };
-      }
+    if (error || !session) {
       return {
-        hasPermission: false,
-        error: '会话查询失败',
-        status: 500
+        success: false,
+        error: "Session not found",
       };
     }
 
-    if (!session) {
+    if (session.user_id !== userId) {
       return {
-        hasPermission: false,
-        error: '会话不存在',
-        status: 404
+        success: false,
+        error: "Access denied",
       };
     }
 
-    return { hasPermission: true };
+    return { success: true };
   } catch (error) {
     return {
-      hasPermission: false,
-      error: '权限检查失败',
-      status: 500
+      success: false,
+      error: "Session access verification failed",
     };
   }
 }
 
 /**
- * 检查用户是否有权限访问指定的消息
+ * 中间件：验证用户权限访问消息
  */
-export async function checkMessagePermission(
-  userId: string, 
-  messageId: string
-): Promise<{ hasPermission: boolean; error?: string; status?: number }> {
+export async function verifyMessageAccess(
+  messageId: string,
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
   try {
     const supabase = createServerSupabaseClient();
-    
-    // 通过消息查找对应的会话，然后检查用户权限
+
     const { data: message, error } = await supabase
-      .from('chat_messages')
-      .select(`
+      .from("chat_messages")
+      .select(
+        `
         id,
-        session_id,
         chat_sessions!inner (
           user_id
         )
-      `)
-      .eq('id', messageId)
+      `
+      )
+      .eq("id", messageId)
       .single();
 
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return {
-          hasPermission: false,
-          error: '无权访问此消息',
-          status: 403
-        };
-      }
+    if (error || !message) {
       return {
-        hasPermission: false,
-        error: '消息查询失败',
-        status: 500
+        success: false,
+        error: "Message not found",
       };
     }
 
-    if (!message || message.chat_sessions.user_id !== userId) {
+    // 修复类型错误：正确访问嵌套的 user_id
+    const session = message.chat_sessions as any;
+    if (!session || session.user_id !== userId) {
       return {
-        hasPermission: false,
-        error: '无权访问此消息',
-        status: 403
+        success: false,
+        error: "Access denied",
       };
     }
 
-    return { hasPermission: true };
+    return { success: true };
   } catch (error) {
     return {
-      hasPermission: false,
-      error: '权限检查失败',
-      status: 500
+      success: false,
+      error: "Message access verification failed",
     };
   }
 }
 
 /**
- * 认证装饰器 - 包装API处理函数以添加认证检查
+ * 认证中间件包装器
  */
 export function withAuth<T extends any[]>(
-  handler: (request: NextRequest, user: User, ...args: T) => Promise<Response>
+  handler: (
+    request: NextRequest,
+    user: AuthUser,
+    ...args: T
+  ) => Promise<Response>
 ) {
   return async (request: NextRequest, ...args: T): Promise<Response> => {
-    const authResult = await authenticateRequest(request);
-    
+    const authResult = await verifyAuth(request);
+
     if (!authResult.success || !authResult.user) {
-      return createErrorResponse(
-        'AUTHENTICATION_FAILED',
-        authResult.error || '认证失败',
-        authResult.status || 401
-      );
+      return createErrorResponse("UNAUTHORIZED", authResult.error || undefined);
     }
 
     return handler(request, authResult.user, ...args);
@@ -209,25 +174,54 @@ export function withAuth<T extends any[]>(
 }
 
 /**
- * 会话权限装饰器 - 包装API处理函数以添加会话权限检查
+ * 获取当前用户信息（用于客户端）
  */
-export function withSessionPermission<T extends any[]>(
-  handler: (request: NextRequest, user: User, sessionId: string, ...args: T) => Promise<Response>,
-  getSessionId: (request: NextRequest, ...args: T) => string | Promise<string>
-) {
-  return withAuth(async (request: NextRequest, user: User, ...args: T): Promise<Response> => {
-    const sessionId = await getSessionId(request, ...args);
-    
-    const permissionResult = await checkSessionPermission(user.id, sessionId);
-    
-    if (!permissionResult.hasPermission) {
-      return createErrorResponse(
-        'ACCESS_DENIED',
-        permissionResult.error || '无权访问',
-        permissionResult.status || 403
-      );
+export async function getCurrentUser(): Promise<AuthUser | null> {
+  try {
+    const supabase = createServerSupabaseClient();
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser();
+
+    if (error || !user) {
+      return null;
     }
 
-    return handler(request, user, sessionId, ...args);
-  });
+    return {
+      id: user.id,
+      email: user.email || "",
+    };
+  } catch (error) {
+    return null;
+  }
 }
+
+/**
+ * 登出用户
+ */
+export async function signOut(): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = createServerSupabaseClient();
+    const { error } = await supabase.auth.signOut();
+
+    if (error) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
+      error: "Sign out failed",
+    };
+  }
+}
+
+/**
+ * 检查会话权限（别名函数，用于向后兼容）
+ */
+export const checkSessionPermission = verifySessionAccess;

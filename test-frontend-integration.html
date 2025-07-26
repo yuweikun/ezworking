@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>前端集成测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        input { padding: 8px; margin: 5px; width: 200px; }
+    </style>
+</head>
+<body>
+    <h1>前端集成测试 - 会话操作</h1>
+    
+    <div class="section info">
+        <h3>测试说明</h3>
+        <p>这个页面测试前端会话操作是否与后端API正确集成</p>
+        <p>测试流程：登录 → 创建会话 → 更新标题 → 删除会话</p>
+    </div>
+    
+    <div class="section">
+        <h3>步骤1: 登录</h3>
+        <button onclick="testLogin()">登录测试用户</button>
+        <div id="login-result"></div>
+    </div>
+    
+    <div class="section">
+        <h3>步骤2: 创建会话</h3>
+        <input type="text" id="session-title" placeholder="会话标题" value="前端测试会话">
+        <button onclick="testCreateSession()">创建会话</button>
+        <div id="create-result"></div>
+    </div>
+    
+    <div class="section">
+        <h3>步骤3: 更新会话标题</h3>
+        <input type="text" id="new-title" placeholder="新标题" value="更新后的标题">
+        <button onclick="testUpdateSession()">更新标题</button>
+        <div id="update-result"></div>
+    </div>
+    
+    <div class="section">
+        <h3>步骤4: 删除会话</h3>
+        <button onclick="testDeleteSession()">删除会话</button>
+        <div id="delete-result"></div>
+    </div>
+    
+    <div class="section">
+        <h3>测试日志</h3>
+        <div id="test-log"></div>
+        <button onclick="clearLog()">清除日志</button>
+    </div>
+
+    <script>
+        let testLog = [];
+        let currentSessionId = null;
+        
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            testLog.push(`[${timestamp}] ${message}`);
+            updateTestLog();
+            console.log(message);
+        }
+        
+        function updateTestLog() {
+            document.getElementById('test-log').innerHTML = 
+                '<pre>' + testLog.slice(-10).join('\n') + '</pre>';
+        }
+        
+        function clearLog() {
+            testLog = [];
+            updateTestLog();
+        }
+        
+        async function testLogin() {
+            log('开始登录测试...');
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        email: 'test@example.com', 
+                        password: '123456' 
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success && data.data.token) {
+                    localStorage.setItem('auth_token', data.data.token);
+                    localStorage.setItem('user_info', JSON.stringify(data.data.user));
+                    
+                    document.getElementById('login-result').innerHTML = 
+                        '<div class="success">✅ 登录成功！Token已保存</div>';
+                    log('登录成功');
+                } else {
+                    document.getElementById('login-result').innerHTML = 
+                        '<div class="error">❌ 登录失败: ' + (data.message || '未知错误') + '</div>';
+                    log('登录失败: ' + (data.message || '未知错误'));
+                }
+            } catch (error) {
+                document.getElementById('login-result').innerHTML = 
+                    '<div class="error">❌ 登录请求失败: ' + error.message + '</div>';
+                log('登录请求失败: ' + error.message);
+            }
+        }
+        
+        async function testCreateSession() {
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                document.getElementById('create-result').innerHTML = 
+                    '<div class="error">❌ 请先登录</div>';
+                return;
+            }
+            
+            const title = document.getElementById('session-title').value.trim();
+            if (!title) {
+                document.getElementById('create-result').innerHTML = 
+                    '<div class="error">❌ 请输入会话标题</div>';
+                return;
+            }
+            
+            log(`创建会话: ${title}`);
+            
+            try {
+                const response = await fetch('/api/sessions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ title })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    currentSessionId = data.data.id;
+                    document.getElementById('create-result').innerHTML = 
+                        '<div class="success">✅ 会话创建成功！<br>ID: ' + currentSessionId + '</div>';
+                    log('会话创建成功，ID: ' + currentSessionId);
+                } else {
+                    document.getElementById('create-result').innerHTML = 
+                        '<div class="error">❌ 创建失败: ' + (data.message || '未知错误') + '</div>';
+                    log('创建失败: ' + (data.message || '未知错误'));
+                }
+            } catch (error) {
+                document.getElementById('create-result').innerHTML = 
+                    '<div class="error">❌ 创建请求失败: ' + error.message + '</div>';
+                log('创建请求失败: ' + error.message);
+            }
+        }
+        
+        async function testUpdateSession() {
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                document.getElementById('update-result').innerHTML = 
+                    '<div class="error">❌ 请先登录</div>';
+                return;
+            }
+            
+            if (!currentSessionId) {
+                document.getElementById('update-result').innerHTML = 
+                    '<div class="error">❌ 请先创建会话</div>';
+                return;
+            }
+            
+            const newTitle = document.getElementById('new-title').value.trim();
+            if (!newTitle) {
+                document.getElementById('update-result').innerHTML = 
+                    '<div class="error">❌ 请输入新标题</div>';
+                return;
+            }
+            
+            log(`更新会话标题: ${currentSessionId} -> ${newTitle}`);
+            
+            try {
+                const response = await fetch(`/api/sessions/${currentSessionId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ title: newTitle })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    document.getElementById('update-result').innerHTML = 
+                        '<div class="success">✅ 标题更新成功！<br>新标题: ' + data.data.title + '</div>';
+                    log('标题更新成功: ' + data.data.title);
+                } else {
+                    document.getElementById('update-result').innerHTML = 
+                        '<div class="error">❌ 更新失败: ' + (data.message || '未知错误') + '</div>';
+                    log('更新失败: ' + (data.message || '未知错误'));
+                }
+            } catch (error) {
+                document.getElementById('update-result').innerHTML = 
+                    '<div class="error">❌ 更新请求失败: ' + error.message + '</div>';
+                log('更新请求失败: ' + error.message);
+            }
+        }
+        
+        async function testDeleteSession() {
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                document.getElementById('delete-result').innerHTML = 
+                    '<div class="error">❌ 请先登录</div>';
+                return;
+            }
+            
+            if (!currentSessionId) {
+                document.getElementById('delete-result').innerHTML = 
+                    '<div class="error">❌ 请先创建会话</div>';
+                return;
+            }
+            
+            log(`删除会话: ${currentSessionId}`);
+            
+            try {
+                const response = await fetch(`/api/sessions/${currentSessionId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ action: 'delete' })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    document.getElementById('delete-result').innerHTML = 
+                        '<div class="success">✅ 会话删除成功！<br>已删除ID: ' + data.data.deleted_session_id + '</div>';
+                    log('会话删除成功');
+                    currentSessionId = null; // 重置会话ID
+                } else {
+                    document.getElementById('delete-result').innerHTML = 
+                        '<div class="error">❌ 删除失败: ' + (data.message || '未知错误') + '</div>';
+                    log('删除失败: ' + (data.message || '未知错误'));
+                }
+            } catch (error) {
+                document.getElementById('delete-result').innerHTML = 
+                    '<div class="error">❌ 删除请求失败: ' + error.message + '</div>';
+                log('删除请求失败: ' + error.message);
+            }
+        }
+        
+        // 页面加载时初始化
+        window.onload = function() {
+            log('前端集成测试页面加载完成');
+        };
+    </script>
+</body>
+</html>

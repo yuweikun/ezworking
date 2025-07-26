@@ -3,19 +3,15 @@ import { createServerSupabaseClient } from '../../../lib/supabase';
 import { createSuccessResponse, createErrorResponse, createValidationErrorResponse, handleApiError, validateMethod } from '../../../lib/utils/response';
 import { validateSessionRequest, validateRequestBody } from '../../../lib/utils/validation';
 import { withAuth } from '../../../lib/utils/auth';
-import { 
-  cachedUserSessions, 
-  cacheInvalidation,
-  cacheHeaders 
-} from '../../../lib/utils/cache';
+
 import { ChatSession, SessionCreateRequest } from '../../../lib/types';
-import type { User } from '@supabase/supabase-js';
+import type { AuthUser } from '../../../lib/utils/auth';
 
 /**
  * GET /api/sessions - 获取用户会话列表
  * 需求: 2.1, 2.2, 2.3, 2.4
  */
-async function getSessions(request: NextRequest, user: User) {
+async function getSessions(request: NextRequest, user: AuthUser) {
   try {
     // 验证请求方法
     const methodError = validateMethod(request, ['GET']);
@@ -29,10 +25,21 @@ async function getSessions(request: NextRequest, user: User) {
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
     const limit = Math.min(50, Math.max(1, parseInt(searchParams.get('limit') || '20')));
 
-    // 使用缓存获取用户会话列表
+    // 获取用户会话列表
     let sessions: ChatSession[];
     try {
-      sessions = await cachedUserSessions(user.id, page, limit);
+      const { data, error } = await supabase
+        .from('chat_sessions')
+        .select('id, user_id, title, created_at, updated_at')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false })
+        .range((page - 1) * limit, page * limit - 1);
+
+      if (error) {
+        throw error;
+      }
+
+      sessions = data || [];
     } catch (error) {
       return handleApiError(error, 'GET /api/sessions - 获取会话列表');
     }
@@ -47,13 +54,7 @@ async function getSessions(request: NextRequest, user: User) {
       }
     };
     
-    // 添加缓存头
-    const successResponse = createSuccessResponse(result);
-    Object.entries(cacheHeaders.short).forEach(([key, value]) => {
-      successResponse.headers.set(key, value);
-    });
-    
-    return successResponse;
+    return createSuccessResponse(result);
 
   } catch (error) {
     return handleApiError(error, 'GET /api/sessions');
@@ -67,7 +68,7 @@ export const GET = withAuth(getSessions);
  * 请求体: { title: string }
  * 需求: 5.1, 5.2, 5.3, 5.4
  */
-async function createSession(request: NextRequest, user: User) {
+async function createSession(request: NextRequest, user: AuthUser) {
   try {
     // 验证请求方法
     const methodError = validateMethod(request, ['POST']);
@@ -94,11 +95,14 @@ async function createSession(request: NextRequest, user: User) {
     const supabase = createServerSupabaseClient();
     
     // 在数据库中创建新会话，使用认证用户的ID
+    const now = new Date().toISOString();
     const { data: session, error } = await supabase
       .from('chat_sessions')
       .insert({
         user_id: user.id,
-        title: body.title.trim()
+        title: body.title.trim(),
+        created_at: now,
+        updated_at: now
       })
       .select('id, user_id, title, created_at, updated_at')
       .single();
@@ -106,9 +110,6 @@ async function createSession(request: NextRequest, user: User) {
     if (error) {
       return handleApiError(error, 'POST /api/sessions - 创建会话');
     }
-
-    // 清除用户会话列表缓存
-    cacheInvalidation.invalidateUserSessions(user.id);
 
     // 返回创建的会话数据，包括生成的UUID (需求 5.2)
     return createSuccessResponse(session, 201);

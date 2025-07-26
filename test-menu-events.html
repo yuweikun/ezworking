@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>测试菜单事件</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .menu-item { 
+            padding: 8px 12px; 
+            border: 1px solid #ddd; 
+            margin: 5px 0; 
+            cursor: pointer; 
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .menu-item:hover { background: #e9ecef; }
+    </style>
+</head>
+<body>
+    <h1>菜单事件测试</h1>
+    
+    <div class="section info">
+        <h3>说明</h3>
+        <p>这个页面模拟前端会话菜单的事件处理，用于测试删除和重命名功能</p>
+    </div>
+    
+    <div class="section">
+        <h3>模拟会话列表</h3>
+        <div id="conversation-list"></div>
+        <button onclick="loadConversations()">加载会话列表</button>
+    </div>
+    
+    <div class="section">
+        <h3>测试结果</h3>
+        <div id="test-results"></div>
+    </div>
+    
+    <div class="section">
+        <h3>调试信息</h3>
+        <div id="debug-info"></div>
+        <button onclick="clearDebug()">清除调试</button>
+    </div>
+
+    <script>
+        let debugInfo = [];
+        let conversations = [];
+        
+        function debug(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            debugInfo.push(`[${timestamp}] ${message}`);
+            updateDebugInfo();
+            console.log(message);
+        }
+        
+        function updateDebugInfo() {
+            document.getElementById('debug-info').innerHTML = 
+                '<pre>' + debugInfo.slice(-10).join('\n') + '</pre>';
+        }
+        
+        function clearDebug() {
+            debugInfo = [];
+            updateDebugInfo();
+        }
+        
+        // 模拟获取会话列表
+        async function loadConversations() {
+            debug('加载会话列表...');
+            
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                document.getElementById('test-results').innerHTML = 
+                    '<div class="error">❌ 请先登录</div>';
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/sessions', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    conversations = data.data.sessions;
+                    renderConversations();
+                    debug(`加载了 ${conversations.length} 个会话`);
+                } else {
+                    document.getElementById('test-results').innerHTML = 
+                        '<div class="error">❌ 加载失败: ' + (data.message || '未知错误') + '</div>';
+                    debug('加载会话失败: ' + (data.message || '未知错误'));
+                }
+            } catch (error) {
+                document.getElementById('test-results').innerHTML = 
+                    '<div class="error">❌ 请求失败: ' + error.message + '</div>';
+                debug('请求失败: ' + error.message);
+            }
+        }
+        
+        // 渲染会话列表
+        function renderConversations() {
+            const listElement = document.getElementById('conversation-list');
+            
+            if (conversations.length === 0) {
+                listElement.innerHTML = '<div class="info">没有会话</div>';
+                return;
+            }
+            
+            let html = '';
+            conversations.forEach(conv => {
+                html += `
+                    <div class="menu-item">
+                        <strong>${conv.title}</strong>
+                        <div style="margin-top: 8px;">
+                            <button onclick="testRename('${conv.id}', '${conv.title}')" style="margin-right: 8px;">重命名</button>
+                            <button onclick="testDelete('${conv.id}', '${conv.title}')" style="background: #ff4d4f; color: white;">删除</button>
+                        </div>
+                    </div>
+                `;
+            });
+            
+            listElement.innerHTML = html;
+        }
+        
+        // 测试重命名功能
+        async function testRename(conversationId, currentTitle) {
+            debug(`测试重命名会话: ${conversationId}`);
+            
+            const newTitle = prompt('请输入新的会话标题:', currentTitle);
+            if (!newTitle || newTitle.trim() === '') {
+                debug('重命名取消或标题为空');
+                return;
+            }
+            
+            if (newTitle.trim() === currentTitle) {
+                debug('标题没有变化');
+                return;
+            }
+            
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                document.getElementById('test-results').innerHTML = 
+                    '<div class="error">❌ 请先登录</div>';
+                return;
+            }
+            
+            try {
+                debug(`发送重命名请求: ${conversationId} -> ${newTitle.trim()}`);
+                
+                const response = await fetch(`/api/sessions/${conversationId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ title: newTitle.trim() })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    document.getElementById('test-results').innerHTML = 
+                        '<div class="success">✅ 重命名成功！新标题: ' + data.data.title + '</div>';
+                    debug('重命名成功: ' + data.data.title);
+                    
+                    // 重新加载会话列表
+                    loadConversations();
+                } else {
+                    document.getElementById('test-results').innerHTML = 
+                        '<div class="error">❌ 重命名失败: ' + (data.message || '未知错误') + '</div>';
+                    debug('重命名失败: ' + (data.message || '未知错误'));
+                }
+            } catch (error) {
+                document.getElementById('test-results').innerHTML = 
+                    '<div class="error">❌ 重命名请求失败: ' + error.message + '</div>';
+                debug('重命名请求失败: ' + error.message);
+            }
+        }
+        
+        // 测试删除功能
+        async function testDelete(conversationId, title) {
+            debug(`测试删除会话: ${conversationId}`);
+            
+            if (!confirm(`确定要删除会话"${title}"吗？此操作无法撤销。`)) {
+                debug('删除取消');
+                return;
+            }
+            
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                document.getElementById('test-results').innerHTML = 
+                    '<div class="error">❌ 请先登录</div>';
+                return;
+            }
+            
+            try {
+                debug(`发送删除请求: ${conversationId}`);
+                
+                const response = await fetch(`/api/sessions/${conversationId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ action: 'delete' })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    document.getElementById('test-results').innerHTML = 
+                        '<div class="success">✅ 删除成功！</div>';
+                    debug('删除成功');
+                    
+                    // 重新加载会话列表
+                    loadConversations();
+                } else {
+                    document.getElementById('test-results').innerHTML = 
+                        '<div class="error">❌ 删除失败: ' + (data.message || '未知错误') + '</div>';
+                    debug('删除失败: ' + (data.message || '未知错误'));
+                }
+            } catch (error) {
+                document.getElementById('test-results').innerHTML = 
+                    '<div class="error">❌ 删除请求失败: ' + error.message + '</div>';
+                debug('删除请求失败: ' + error.message);
+            }
+        }
+        
+        // 页面加载时自动登录并加载会话
+        window.onload = async function() {
+            debug('页面加载完成');
+            
+            // 检查是否已登录
+            const token = localStorage.getItem('auth_token');
+            if (!token) {
+                debug('未登录，尝试自动登录...');
+                
+                try {
+                    const response = await fetch('/api/auth/login', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ 
+                            email: 'test@example.com', 
+                            password: '123456' 
+                        })
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (response.ok && data.success && data.data.token) {
+                        localStorage.setItem('auth_token', data.data.token);
+                        localStorage.setItem('user_info', JSON.stringify(data.data.user));
+                        debug('自动登录成功');
+                        loadConversations();
+                    } else {
+                        debug('自动登录失败');
+                    }
+                } catch (error) {
+                    debug('自动登录请求失败: ' + error.message);
+                }
+            } else {
+                debug('已登录，加载会话列表');
+                loadConversations();
+            }
+        };
+    </script>
+</body>
+</html>

@@ -1,49 +1,125 @@
-// 用户信息接口
-export interface UserInfo {
+/**
+ * 认证相关类型定义
+ */
+
+export interface AuthUser {
   id: string;
   email: string;
+  name?: string;
+  avatar?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
-// 认证状态接口
-export interface AuthState {
-  isAuthenticated: boolean;
-  user: UserInfo | null;
-  token: string | null;
-}
-
-// 认证上下文类型
-export interface AuthContextType {
-  // 状态
-  isAuthenticated: boolean;
-  user: UserInfo | null;
-  loading: boolean;
-  
-  // 操作
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
-  logout: () => void;
-  checkAuthStatus: () => void;
-}
-
-// API请求类型
 export interface LoginRequest {
   email: string;
   password: string;
 }
 
+export interface LoginResponse {
+  success: boolean;
+  data?: {
+    token: string;
+    user: AuthUser;
+    session?: {
+      access_token: string;
+      refresh_token: string;
+      expires_at?: number;
+      expires_in?: number;
+      token_type?: string;
+    };
+  };
+  error?: string;
+  message?: string;
+}
+
 export interface RegisterRequest {
   email: string;
   password: string;
+  name?: string;
 }
 
-// API响应类型
-export interface AuthResponse {
-  token: string;
-  user: UserInfo;
+export interface RegisterResponse {
+  success: boolean;
+  data?: {
+    user: AuthUser;
+    message: string;
+  };
+  error?: string;
+  message?: string;
 }
 
-// 错误类型
-export interface ApiError {
+export interface AuthState {
+  user: AuthUser | null;
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  error: string | null;
+}
+
+export interface AuthContextType {
+  // 状态
+  user: AuthUser | null;
+  isAuthenticated: boolean;
+  loading: boolean;
+  
+  // 操作
+  login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, name?: string) => Promise<void>;
+  logout: () => void;
+  checkAuthStatus: () => void;
+}
+
+export interface AuthProviderProps {
+  children: React.ReactNode;
+}
+
+// 认证错误类型
+export enum AuthErrorType {
+  INVALID_CREDENTIALS = 'INVALID_CREDENTIALS',
+  USER_EXISTS = 'USER_EXISTS',
+  EMAIL_NOT_CONFIRMED = 'EMAIL_NOT_CONFIRMED',
+  NETWORK_ERROR = 'NETWORK_ERROR',
+  UNKNOWN_ERROR = 'UNKNOWN_ERROR'
+}
+
+export interface AuthError {
+  type: AuthErrorType;
   message: string;
-  code?: string;
+  details?: any;
 }
+
+// API 错误接口
+export interface ApiError {
+  error: string;
+  message: string;
+  status: number;
+  timestamp: string;
+  details?: any;
+}
+
+// 认证响应接口（完整的 API 响应）
+export interface AuthResponse {
+  success: boolean;
+  data?: {
+    token: string;
+    user: AuthUser;
+  };
+  error?: string;
+  message?: string;
+}
+
+// 认证数据接口（AuthService 返回的数据）
+export interface AuthData {
+  token: string;
+  user: AuthUser;
+  session?: {
+    access_token: string;
+    refresh_token: string;
+    expires_at?: number;
+    expires_in?: number;
+    token_type?: string;
+  };
+}
+
+// 用户信息接口（别名）
+export interface UserInfo extends AuthUser {}

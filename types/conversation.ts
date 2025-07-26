@@ -175,7 +175,6 @@ export interface ConversationContextType {
   
   // 操作
   fetchConversations: (options?: { 
-    useCache?: boolean; 
     showError?: boolean;
     silent?: boolean;
   }) => Promise<void>;

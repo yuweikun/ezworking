@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>直接API测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>直接API测试</h1>
+    
+    <div class="section">
+        <h3>测试新的API端点</h3>
+        <button onclick="testNewUpdateAPI()">测试更新API</button>
+        <button onclick="testNewDeleteAPI()">测试删除API</button>
+        <div id="test-results"></div>
+    </div>
+    
+    <div class="section">
+        <h3>调试日志</h3>
+        <div id="debug-log"></div>
+        <button onclick="clearLog()">清除日志</button>
+    </div>
+
+    <script>
+        let debugLog = [];
+        let testSessionId = null;
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            debugLog.push(`[${timestamp}] ${message}`);
+            updateDebugLog();
+            console.log(message);
+        }
+        
+        function updateDebugLog() {
+            document.getElementById('debug-log').innerHTML = 
+                '<pre>' + debugLog.slice(-10).join('\n') + '</pre>';
+        }
+        
+        function clearLog() {
+            debugLog = [];
+            updateDebugLog();
+        }
+        
+        async function ensureLoggedIn() {
+            let token = localStorage.getItem('auth_token');
+            
+            if (!token) {
+                log('未登录，尝试自动登录...');
+                try {
+                    const response = await fetch('/api/auth/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: 'test@example.com', password: '123456' })
+                    });
+                    
+                    const data = await response.json();
+                    if (data.success) {
+                        token = data.data.token;
+                        localStorage.setItem('auth_token', token);
+                        localStorage.setItem('user_info', JSON.stringify(data.data.user));
+                        log('自动登录成功');
+                    } else {
+                        throw new Error('登录失败: ' + data.message);
+                    }
+                } catch (error) {
+                    log('登录失败: ' + error.message);
+                    return null;
+                }
+            }
+            
+            return token;
+        }
+        
+        async function ensureTestSession() {
+            if (testSessionId) return testSessionId;
+            
+            const token = await ensureLoggedIn();
+            if (!token) return null;
+            
+            log('创建测试会话...');
+            try {
+                const response = await fetch('/api/sessions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ title: '直接API测试会话' })
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    testSessionId = data.data.id;
+                    log('测试会话创建成功: ' + testSessionId);
+                    return testSessionId;
+                } else {
+                    throw new Error('创建会话失败: ' + data.message);
+                }
+            } catch (error) {
+                log('创建会话失败: ' + error.message);
+                return null;
+            }
+        }
+        
+        async function testNewUpdateAPI() {
+            log('测试新的更新API...');
+            
+            const token = await ensureLoggedIn();
+            const sessionId = await ensureTestSession();
+            
+            if (!token || !sessionId) {
+                document.getElementById('test-results').innerHTML = 
+                    '<div class="error">❌ 准备工作失败</div>';
+                return;
+            }
+            
+            try {
+                const requestData = {
+                    sessionId: sessionId,
+                    title: '通过新API更新的标题 ' + new Date().toLocaleTimeString()
+                };
+                
+                log('发送更新请求: ' + JSON.stringify(requestData));
+                
+                const response = await fetch('/api/sessions/update', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                log(`更新API响应状态: ${response.status}`);
+                
+                const responseText = await response.text();
+                log('更新API响应内容: ' + responseText);
+                
+                if (response.ok) {
+                    const data = JSON.parse(responseText);
+                    document.getElementById('test-results').innerHTML = 
+                        '<div class="success">✅ 更新API测试成功！<pre>' + JSON.stringify(data, null, 2) + '</pre></div>';
+                } else {
+                    document.getElementById('test-results').innerHTML = 
+                        '<div class="error">❌ 更新API测试失败 (状态: ' + response.status + ')<pre>' + responseText + '</pre></div>';
+                }
+            } catch (error) {
+                log('更新API测试异常: ' + error.message);
+                document.getElementById('test-results').innerHTML = 
+                    '<div class="error">❌ 更新API测试异常: ' + error.message + '</div>';
+            }
+        }
+        
+        async function testNewDeleteAPI() {
+            log('测试新的删除API...');
+            
+            const token = await ensureLoggedIn();
+            const sessionId = await ensureTestSession();
+            
+            if (!token || !sessionId) {
+                document.getElementById('test-results').innerHTML = 
+                    '<div class="error">❌ 准备工作失败</div>';
+                return;
+            }
+            
+            try {
+                const requestData = {
+                    sessionId: sessionId
+                };
+                
+                log('发送删除请求: ' + JSON.stringify(requestData));
+                
+                const response = await fetch('/api/sessions/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestData)
+                });
+                
+                log(`删除API响应状态: ${response.status}`);
+                
+                const responseText = await response.text();
+                log('删除API响应内容: ' + responseText);
+                
+                if (response.ok) {
+                    const data = JSON.parse(responseText);
+                    document.getElementById('test-results').innerHTML = 
+                        '<div class="success">✅ 删除API测试成功！<pre>' + JSON.stringify(data, null, 2) + '</pre></div>';
+                    testSessionId = null; // 重置会话ID
+                } else {
+                    document.getElementById('test-results').innerHTML = 
+                        '<div class="error">❌ 删除API测试失败 (状态: ' + response.status + ')<pre>' + responseText + '</pre></div>';
+                }
+            } catch (error) {
+                log('删除API测试异常: ' + error.message);
+                document.getElementById('test-results').innerHTML = 
+                    '<div class="error">❌ 删除API测试异常: ' + error.message + '</div>';
+            }
+        }
+        
+        // 页面加载时自动登录
+        window.onload = function() {
+            log('页面加载完成');
+            ensureLoggedIn();
+        };
+    </script>
+</body>
+</html>

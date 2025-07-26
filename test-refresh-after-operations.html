@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>操作后刷新测试</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background-color: #d4edda; border-color: #c3e6cb; }
+        .error { background-color: #f8d7da; border-color: #f5c6cb; }
+        .info { background-color: #d1ecf1; border-color: #bee5eb; }
+        button { padding: 8px 16px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .session-item { 
+            padding: 10px; 
+            border: 1px solid #ddd; 
+            margin: 5px 0; 
+            border-radius: 4px;
+            background: #f8f9fa;
+        }
+    </style>
+</head>
+<body>
+    <h1>操作后刷新测试</h1>
+    
+    <div class="section info">
+        <h3>测试说明</h3>
+        <p>验证删除和重命名操作后会话列表是否自动刷新：</p>
+        <ul>
+            <li>重命名会话后应该看到新的标题</li>
+            <li>删除会话后应该从列表中消失</li>
+            <li>操作完成后会话列表应该自动更新</li>
+        </ul>
+    </div>
+    
+    <div class="section">
+        <h3>当前会话列表</h3>
+        <button onclick="loadSessions()">刷新会话列表</button>
+        <div id="sessions-list"></div>
+    </div>
+    
+    <div class="section">
+        <h3>测试操作</h3>
+        <button onclick="createTestSession()">创建测试会话</button>
+        <button onclick="testRename()">测试重命名（通过API）</button>
+        <button onclick="testDelete()">测试删除（通过API）</button>
+        <div id="operation-result"></div>
+    </div>
+    
+    <div class="section">
+        <h3>测试步骤</h3>
+        <ol>
+            <li>点击"创建测试会话"创建一些测试数据</li>
+            <li>在主应用中右键点击会话项</li>
+            <li>选择"Rename"并输入新标题</li>
+            <li>观察会话列表是否自动更新显示新标题</li>
+            <li>右键点击另一个会话项</li>
+            <li>选择"Delete"并确认删除</li>
+            <li>观察会话是否从列表中消失</li>
+            <li>检查控制台日志确认刷新操作</li>
+        </ol>
+    </div>
+    
+    <div class="section">
+        <h3>预期行为</h3>
+        <ul>
+            <li>✅ 重命名成功后显示新标题</li>
+            <li>✅ 删除成功后会话从列表消失</li>
+            <li>✅ 控制台显示: <code>✅ 重命名后会话列表已刷新</code></li>
+            <li>✅ 控制台显示: <code>✅ 删除后会话列表已刷新</code></li>
+            <li>✅ 无需手动刷新页面</li>
+        </ul>
+    </div>
+    
+    <div class="section">
+        <h3>调试日志</h3>
+        <div id="debug-log"></div>
+        <button onclick="clearLog()">清除日志</button>
+    </div>
+
+    <script>
+        let debugLog = [];
+        let sessions = [];
+        
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            debugLog.push(`[${timestamp}] ${message}`);
+            updateDebugLog();
+            console.log(message);
+        }
+        
+        function updateDebugLog() {
+            document.getElementById('debug-log').innerHTML = 
+                '<pre>' + debugLog.slice(-10).join('\n') + '</pre>';
+        }
+        
+        function clearLog() {
+            debugLog = [];
+            updateDebugLog();
+        }
+        
+        async function ensureLoggedIn() {
+            let token = localStorage.getItem('auth_token');
+            
+            if (!token) {
+                log('未登录，尝试自动登录...');
+                try {
+                    const response = await fetch('/api/auth/login', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: 'test@example.com', password: '123456' })
+                    });
+                    
+                    const data = await response.json();
+                    if (data.success) {
+                        token = data.data.token;
+                        localStorage.setItem('auth_token', token);
+                        localStorage.setItem('user_info', JSON.stringify(data.data.user));
+                        log('自动登录成功');
+                    } else {
+                        throw new Error('登录失败: ' + data.message);
+                    }
+                } catch (error) {
+                    log('登录失败: ' + error.message);
+                    return null;
+                }
+            }
+            
+            return token;
+        }
+        
+        async function loadSessions() {
+            const token = await ensureLoggedIn();
+            if (!token) return;
+            
+            log('加载会话列表...');
+            
+            try {
+                const response = await fetch('/api/sessions', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    sessions = data.data.sessions;
+                    renderSessions();
+                    log(`加载了 ${sessions.length} 个会话`);
+                } else {
+                    throw new Error('加载失败: ' + (data.message || '未知错误'));
+                }
+            } catch (error) {
+                log('加载会话列表失败: ' + error.message);
+                document.getElementById('sessions-list').innerHTML = 
+                    '<div class="error">❌ 加载失败: ' + error.message + '</div>';
+            }
+        }
+        
+        function renderSessions() {
+            const container = document.getElementById('sessions-list');
+            
+            if (sessions.length === 0) {
+                container.innerHTML = '<div class="info">没有会话</div>';
+                return;
+            }
+            
+            let html = `<div class="success">找到 ${sessions.length} 个会话:</div>`;
+            sessions.forEach((session, index) => {
+                html += `
+                    <div class="session-item">
+                        <strong>${session.title}</strong>
+                        <div style="font-size: 12px; color: #666; margin-top: 4px;">
+                            ID: ${session.id}<br>
+                            创建: ${new Date(session.created_at).toLocaleString()}<br>
+                            更新: ${new Date(session.updated_at).toLocaleString()}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.innerHTML = html;
+        }
+        
+        async function createTestSession() {
+            const token = await ensureLoggedIn();
+            if (!token) return;
+            
+            const title = '刷新测试会话 ' + new Date().toLocaleTimeString();
+            log(`创建测试会话: ${title}`);
+            
+            try {
+                const response = await fetch('/api/sessions', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ title })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    document.getElementById('operation-result').innerHTML = 
+                        '<div class="success">✅ 测试会话创建成功</div>';
+                    log('测试会话创建成功: ' + data.data.id);
+
+                } else {
+                    throw new Error('创建失败: ' + (data.message || '未知错误'));
+                }
+            } catch (error) {
+                document.getElementById('operation-result').innerHTML = 
+                    '<div class="error">❌ 创建失败: ' + error.message + '</div>';
+                log('创建测试会话失败: ' + error.message);
+            }
+        }
+        
+        async function testRename() {
+            if (sessions.length === 0) {
+                document.getElementById('operation-result').innerHTML = 
+                    '<div class="error">❌ 请先创建测试会话</div>';
+                return;
+            }
+            
+            const token = await ensureLoggedIn();
+            if (!token) return;
+            
+            const session = sessions[0];
+            const newTitle = '重命名测试 ' + new Date().toLocaleTimeString();
+            
+            log(`测试重命名: ${session.id} -> ${newTitle}`);
+            
+            try {
+                const response = await fetch('/api/sessions/update', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ 
+                        sessionId: session.id,
+                        title: newTitle 
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    document.getElementById('operation-result').innerHTML = 
+                        '<div class="success">✅ 重命名测试成功</div>';
+                    log('重命名测试成功');
+                    
+
+                } else {
+                    throw new Error('重命名失败: ' + (data.message || '未知错误'));
+                }
+            } catch (error) {
+                document.getElementById('operation-result').innerHTML = 
+                    '<div class="error">❌ 重命名失败: ' + error.message + '</div>';
+                log('重命名测试失败: ' + error.message);
+            }
+        }
+        
+        async function testDelete() {
+            if (sessions.length === 0) {
+                document.getElementById('operation-result').innerHTML = 
+                    '<div class="error">❌ 请先创建测试会话</div>';
+                return;
+            }
+            
+            const token = await ensureLoggedIn();
+            if (!token) return;
+            
+            const session = sessions[sessions.length - 1]; // 删除最后一个
+            
+            if (!confirm(`确定要删除会话"${session.title}"吗？`)) {
+                return;
+            }
+            
+            log(`测试删除: ${session.id}`);
+            
+            try {
+                const response = await fetch('/api/sessions/delete', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ sessionId: session.id })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    document.getElementById('operation-result').innerHTML = 
+                        '<div class="success">✅ 删除测试成功</div>';
+                    log('删除测试成功');
+                    
+
+                } else {
+                    throw new Error('删除失败: ' + (data.message || '未知错误'));
+                }
+            } catch (error) {
+                document.getElementById('operation-result').innerHTML = 
+                    '<div class="error">❌ 删除失败: ' + error.message + '</div>';
+                log('删除测试失败: ' + error.message);
+            }
+        }
+        
+        // 页面加载时自动加载会话列表
+        window.onload = function() {
+            log('页面加载完成');
+            loadSessions();
+        };
+    </script>
+</body>
+</html>

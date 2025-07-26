@@ -23,6 +23,7 @@ const testConversation: Conversation = {
 // 测试 SessionResponse 接口
 const testSessionResponse: SessionResponse = {
   id: 'session-1',
+  user_id: 'user-123',
   title: 'Test Session',
   created_at: '2024-01-01T00:00:00Z',
   updated_at: '2024-01-01T00:00:00Z'

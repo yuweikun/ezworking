@@ -1,18 +1,32 @@
 import axios, { AxiosInstance, AxiosError, AxiosResponse } from 'axios';
 import { ENV } from '../config/env';
 import { ERROR_MESSAGES } from '../types/constants';
-import { ApiError } from '../types/auth';
 
-// 创建axios实例
+// 定义 ApiError 接口（临时）
+interface ApiError {
+  message: string;
+  code: string;
+}
+
+// 创建axios实例 - 使用根路径作为 baseURL
 const httpClient: AxiosInstance = axios.create({
-  baseURL: ENV.API_URL,
-  timeout: ENV.AUTH_TIMEOUT,
+  baseURL: 'http://localhost:3000',
+  timeout: ENV.AUTH_TIMEOUT || 10000,
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// 请求拦截器
+// 调试信息
+console.log('HTTP Client 配置:', {
+  baseURL: 'http://localhost:3000',
+  timeout: ENV.AUTH_TIMEOUT || 10000,
+  note: 'API 路径将直接使用完整路径，如 /api/auth/login'
+});
+
+
+
+// 请求拦截器（合并了调试和认证功能）
 httpClient.interceptors.request.use(
   (config) => {
     // 从localStorage获取token并添加到请求头
@@ -20,6 +34,15 @@ httpClient.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // 调试信息
+    console.log('📤 发送请求:', {
+      method: config.method?.toUpperCase(),
+      url: config.url,
+      baseURL: config.baseURL,
+      fullURL: `${config.baseURL}${config.url}`,
+      headers: config.headers
+    });
     
     return config;
   },

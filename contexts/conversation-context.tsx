@@ -81,7 +81,6 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
 
   // 获取会话列表
   const fetchConversations = useCallback(async (options: { 
-    useCache?: boolean; 
     showError?: boolean;
     silent?: boolean;
   } = {}) => {
@@ -90,7 +89,7 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
       return;
     }
 
-    const { useCache = false, showError = false, silent = false } = options;
+    const { showError = false, silent = false } = options;
 
     try {
       if (!silent) {
@@ -102,7 +101,6 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
       const fetchedConversations = await ConversationService.fetchConversations(
         user.id,
         { 
-          useCache, 
           showError,
           retryOnFailure: true
         }
@@ -124,7 +122,7 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
       if (!silent && showError) {
         ErrorHandler.showError(conversationError, {
           showNotification: true,
-          fallbackAction: () => fetchConversations({ ...options, useCache: false })
+          fallbackAction: () => fetchConversations({ ...options })
         });
       }
     } finally {
@@ -166,8 +164,9 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
         { showSuccess, showError, retryOnFailure: true }
       );
       
-      // 将新会话添加到列表顶部
-      setConversations(prev => [newConversation, ...prev]);
+      // 创建成功后刷新会话列表以确保数据一致性
+      console.log('🔄 创建会话成功，刷新会话列表...');
+      await fetchConversations({ showError: false, silent: true });
       
       // 自动选中新创建的会话
       if (autoSelect) {
@@ -288,12 +287,9 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
       
       const updatedConversation = await ConversationService.updateConversation(conversationId, updateData);
       
-      // 更新列表中的会话
-      setConversations(prev => 
-        prev.map(conv => 
-          conv.key === conversationId ? updatedConversation : conv
-        )
-      );
+      // 更新成功后刷新会话列表以确保数据一致性
+      console.log('🔄 更新会话成功，刷新会话列表...');
+      await fetchConversations({ showError: false, silent: true });
       
       return updatedConversation;
     } catch (err: any) {
@@ -332,7 +328,6 @@ export function ConversationProvider({ children }: ConversationProviderProps) {
     
     try {
       await fetchConversations({ 
-        useCache: !force, 
         showError: true,
         silent: false
       });

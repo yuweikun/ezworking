@@ -13,12 +13,9 @@ import {
   validateRequestBody,
 } from "../../../../lib/utils/validation";
 import { withAuth, checkSessionPermission } from "../../../../lib/utils/auth";
-import {
-  cachedSessionPermissionCheck,
-  cacheInvalidation,
-} from "../../../../lib/utils/cache";
+
 import { SessionUpdateRequest } from "../../../../lib/types";
-import type { User } from "@supabase/supabase-js";
+import type { AuthUser } from "../../../../lib/utils/auth";
 
 /**
  * POST /api/sessions/[id] - 更新或删除会话
@@ -28,7 +25,7 @@ import type { User } from "@supabase/supabase-js";
  */
 async function updateOrDeleteSession(
   request: NextRequest,
-  user: User,
+  user: AuthUser,
   context: { params: { id: string } }
 ) {
   try {
@@ -45,14 +42,17 @@ async function updateOrDeleteSession(
 
     // 检查用户是否有权限访问此会话 (使用缓存)
     const permissionResult = await cachedSessionPermissionCheck(
+      sessionId,
       user.id,
-      sessionId
+      async () => {
+        return await checkSessionPermission(sessionId, user.id);
+      }
     );
-    if (!permissionResult.hasPermission) {
+    if (!permissionResult.success) {
       return createErrorResponse(
         "ACCESS_DENIED",
         permissionResult.error || "无权访问此会话",
-        permissionResult.status || 403
+        403
       );
     }
 
@@ -91,9 +91,8 @@ async function updateOrDeleteSession(
       }
 
       // 清除相关缓存
-      cacheInvalidation.invalidateUserSessions(user.id);
-      cacheInvalidation.invalidateMessageHistory(sessionId);
-      cacheInvalidation.invalidateSessionPermission(user.id, sessionId);
+      cacheInvalidation.clearUserCache(user.id);
+      cacheInvalidation.clearSessionCache(sessionId);
 
       // 返回删除成功确认 (需求 7.2)
       return createSuccessResponse({
@@ -131,8 +130,7 @@ async function updateOrDeleteSession(
     }
 
     // 清除相关缓存
-    cacheInvalidation.invalidateUserSessions(user.id);
-    cacheInvalidation.invalidateSessionPermission(user.id, sessionId);
+    cacheInvalidation.clearUserCache(user.id);
 
     // 返回更新后的会话数据 (需求 8.2)
     return createSuccessResponse(updatedSession);
