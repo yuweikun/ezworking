@@ -34,7 +34,7 @@ export interface ConversationGroup {
  * 获取会话列表请求
  */
 export interface GetSessionsRequest {
-  user_id: string;
+  id: string;
 }
 
 /**
@@ -42,9 +42,31 @@ export interface GetSessionsRequest {
  */
 export interface SessionResponse {
   id: string;
+  user_id: string;
   title: string;
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * 分页信息
+ */
+export interface PaginationInfo {
+  page: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+/**
+ * 获取会话列表响应
+ */
+export interface GetSessionsResponse {
+  success: boolean;
+  data: {
+    sessions: SessionResponse[];
+    pagination: PaginationInfo;
+  };
+  timestamp: string;
 }
 
 /**
