@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "exclude": [
+    "**/__tests__/**",
+    "**/test/**",
+    "antdx-demo/**",
+    "**/*.test.ts",
+    "**/*.test.tsx"
+  ]
+}

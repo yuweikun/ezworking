@@ -2,3 +2,4 @@
 export { default as httpClient } from './http-client';
 export { TokenManager } from './token-manager';
 export { StorageUtils } from './storage-utils';
+export { ErrorHandler } from './error-handler';
