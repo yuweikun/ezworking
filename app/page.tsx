@@ -34,10 +34,16 @@ import {
   useXChat,       // 聊天功能 Hook
 } from '@ant-design/x';
 // 导入 Ant Design 基础组件
-import { Button, Flex, type GetProp, Space, Spin, message } from 'antd';
+import { Button, Flex, type GetProp, Space, Spin, message, Modal } from 'antd';
 import { createStyles } from 'antd-style';  // 样式创建工具
-import dayjs from 'dayjs';  // 日期处理库
+// import dayjs from 'dayjs';  // 日期处理库 - 暂时未使用
 import React, { useEffect, useRef, useState } from 'react';
+import { useConversation } from '../contexts/conversation-context';
+import { useAuth } from '../contexts/auth-context';
+import { generateDefaultTitle } from '../types/conversation-utils';
+import { useConversationRealtime } from '../hooks/use-conversation-realtime';
+import { ErrorHandler } from '../lib/error-handler';
+import { ErrorBoundary } from '../components/error-boundary';
 
 // 定义聊天气泡数据类型
 type BubbleDataType = {
@@ -45,24 +51,9 @@ type BubbleDataType = {
   content: string;  // 消息内容
 };
 
-// 默认会话列表数据
-const DEFAULT_CONVERSATIONS_ITEMS = [
-  {
-    key: 'default-0',
-    label: 'What is Ant Design X?',  // 会话标题
-    group: 'Today',                  // 分组标签
-  },
-  {
-    key: 'default-1',
-    label: 'How to quickly install and import components?',
-    group: 'Today',
-  },
-  {
-    key: 'default-2',
-    label: 'New AGI Hybrid Interface',
-    group: 'Yesterday',
-  },
-];
+
+
+
 
 // 设计指南配置 - 用于欢迎页面的设计理念展示
 const DESIGN_GUIDE = {
@@ -228,6 +219,16 @@ const useStyle = createStyles(({ token, css }) => {
       margin: 0 auto;
       color: ${token.colorText};
     `,
+    
+    // 添加加载动画
+    '@keyframes loading-shimmer': {
+      '0%': {
+        transform: 'translateX(-100%)',
+      },
+      '100%': {
+        transform: 'translateX(400%)',
+      },
+    },
   };
 });
 
@@ -235,16 +236,124 @@ const Independent: React.FC = () => {
   const { styles } = useStyle();  // 获取样式
   const abortController = useRef<AbortController>(null);  // 用于取消请求的控制器
 
+  // ==================== 上下文集成 ====================
+  const { isAuthenticated, user } = useAuth();
+  // ==================== 会话管理集成 ====================
+  const { 
+    conversations, 
+    activeConversationId, 
+    loading: conversationLoading,
+    error: conversationError,
+    createConversation,
+    deleteConversation,
+    setActiveConversation,
+    clearError,
+    fetchConversations,
+    refreshConversations
+  } = useConversation();
+
+  // ==================== 实时更新集成 ====================
+  const {
+    onMessageAdded,
+    onUserTyping,
+    syncConversationState,
+    handleMultipleActivities,
+    hasPendingUpdates,
+    cleanup: cleanupRealtime
+  } = useConversationRealtime();
+
   // ==================== 状态管理 ====================
   const [messageHistory, setMessageHistory] = useState<Record<string, any>>({});  // 消息历史记录
-
-  const [conversations, setConversations] = useState(DEFAULT_CONVERSATIONS_ITEMS);  // 会话列表
-  const [curConversation, setCurConversation] = useState(DEFAULT_CONVERSATIONS_ITEMS[0].key);  // 当前选中的会话
 
   const [attachmentsOpen, setAttachmentsOpen] = useState(false);  // 附件面板是否打开
   const [attachedFiles, setAttachedFiles] = useState<GetProp<typeof Attachments, 'items'>>([]);  // 已附加的文件列表
 
   const [inputValue, setInputValue] = useState('');  // 输入框的值
+  
+  // 操作加载状态
+  const [operationLoading, setOperationLoading] = useState<{
+    creating: boolean;
+    deleting: string | null; // 存储正在删除的会话ID
+    switching: boolean;
+  }>({
+    creating: false,
+    deleting: null,
+    switching: false
+  });
+
+  // 网络状态
+  const [isOnline, setIsOnline] = useState(true);
+
+  // 监听网络状态变化
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      // 网络恢复时自动重新获取会话列表
+      if (isAuthenticated && user?.id && conversationError) {
+        clearError();
+        fetchConversations();
+      }
+    };
+    
+    const handleOffline = () => {
+      setIsOnline(false);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // 初始化网络状态
+    setIsOnline(navigator.onLine);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [isAuthenticated, user?.id, conversationError, clearError, fetchConversations]);
+
+  // 组件卸载时清理实时更新资源
+  useEffect(() => {
+    return () => {
+      cleanupRealtime();
+    };
+  }, [cleanupRealtime]);
+
+  // 定期同步会话状态（确保数据一致性）
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id) {
+      return;
+    }
+
+    // 每30秒进行一次智能同步（仅在有活动时）
+    const syncInterval = setInterval(() => {
+      if (isOnline && !hasPendingUpdates()) {
+        // 只有在网络在线且没有待处理更新时才进行同步
+        syncConversationState(activeConversationId || '').catch(error => {
+          console.warn('定期同步失败:', error);
+        });
+      }
+    }, 30000); // 30秒
+
+    return () => {
+      clearInterval(syncInterval);
+    };
+  }, [isAuthenticated, user?.id, isOnline, activeConversationId, hasPendingUpdates, syncConversationState]);
+
+  // 当切换会话时，同步目标会话的状态
+  useEffect(() => {
+    if (activeConversationId && isOnline && isAuthenticated && user?.id) {
+      // 延迟同步，避免频繁切换时的性能问题
+      const syncTimeout = setTimeout(() => {
+        syncConversationState(activeConversationId).catch(error => {
+          console.warn('切换会话时同步失败:', error);
+        });
+      }, 1000); // 1秒延迟
+
+      return () => {
+        clearTimeout(syncTimeout);
+      };
+    }
+  }, [activeConversationId, isOnline, isAuthenticated, user?.id, syncConversationState]);
 
   /**
    * 🔔 请将 BASE_URL、PATH、MODEL、API_KEY 替换为你自己的值
@@ -326,6 +435,15 @@ const Independent: React.FC = () => {
       return;
     }
 
+    // 如果有活跃会话，更新会话的活动状态
+    if (activeConversationId) {
+      // 立即更新会话时间戳，表示用户正在此会话中活动
+      onMessageAdded(activeConversationId, val, 'user', {
+        skipSync: false, // 允许同步以获取准确的消息数量
+        batchUpdate: false // 立即更新，因为这是用户主动操作
+      });
+    }
+
     // 发送请求
     onRequest({
       stream: true,  // 启用流式响应
@@ -351,74 +469,298 @@ const Independent: React.FC = () => {
 
       {/* 🌟 新建会话按钮 */}
       <Button
-        onClick={() => {
-          const now = dayjs().valueOf().toString();  // 生成时间戳作为唯一 key
-          // 在会话列表前面添加新会话
-          setConversations([
-            {
-              key: now,
-              label: `New Conversation ${conversations.length + 1}`,  // 新会话标题
-              group: 'Today',  // 分组为今天
-            },
-            ...conversations,
-          ]);
-          setCurConversation(now);  // 切换到新会话
-          setMessages([]);  // 清空消息列表
+        onClick={async () => {
+          if (!isAuthenticated || !user?.id) {
+            ErrorHandler.showError(
+              new Error('请先登录'), 
+              { showMessage: true }
+            );
+            return;
+          }
+          
+          setOperationLoading(prev => ({ ...prev, creating: true }));
+          
+          try {
+            const title = generateDefaultTitle(conversations.length);
+            await createConversation(title, {
+              showSuccess: true,
+              showError: true,
+              autoSelect: true
+            });
+            setMessages([]);  // 清空消息列表
+            clearError(); // 清除任何现有错误
+          } catch (error: any) {
+            console.error('创建会话失败:', error);
+            // 错误已在context中处理，这里不需要重复显示
+          } finally {
+            setOperationLoading(prev => ({ ...prev, creating: false }));
+          }
         }}
         type="link"
         className={styles.addBtn}
         icon={<PlusOutlined />}
+        loading={operationLoading.creating || conversationLoading}
+        disabled={!isAuthenticated || operationLoading.creating}
       >
-        新建会话
+        {operationLoading.creating ? '创建中...' : '新建会话'}
       </Button>
 
       {/* 🌟 会话列表管理 */}
-      <Conversations
-        items={conversations}  // 会话列表数据
-        className={styles.conversations}
-        activeKey={curConversation}  // 当前激活的会话
-        onActiveChange={async (val) => {
-          abortController.current?.abort();  // 取消当前请求
-          // 中止执行会触发异步的 requestFallback，可能导致时序问题
-          // 在未来版本中，将添加 sessionId 功能来解决这个问题
-          setTimeout(() => {
-            setCurConversation(val);  // 切换会话
-            setMessages(messageHistory?.[val] || []);  // 加载对应会话的消息历史
-          }, 100);
-        }}
-        groupable  // 启用分组功能
-        styles={{ item: { padding: '0 8px' } }}
-        // 会话右键菜单配置
-        menu={(conversation) => ({
-          items: [
-            {
-              label: 'Rename',  // 重命名
-              key: 'rename',
-              icon: <EditOutlined />,
-            },
-            {
-              label: 'Delete',  // 删除
-              key: 'delete',
-              icon: <DeleteOutlined />,
-              danger: true,  // 危险操作样式
-              onClick: () => {
-                // 从列表中移除选中的会话
-                const newList = conversations.filter((item) => item.key !== conversation.key);
-                const newKey = newList?.[0]?.key;  // 获取第一个会话作为新的当前会话
-                setConversations(newList);
-                // 删除操作会修改 curConversation 并触发 onActiveChange，需要延迟执行以确保最终正确覆盖
-                // 这个功能将在未来版本中修复
-                setTimeout(() => {
-                  if (conversation.key === curConversation) {
-                    setCurConversation(newKey);
-                    setMessages(messageHistory?.[newKey] || []);
+      <div style={{ position: 'relative', flex: 1, display: 'flex', flexDirection: 'column' }}>
+        {/* 刷新按钮 */}
+        {isAuthenticated && conversations.length > 0 && (
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'flex-end', 
+            padding: '8px 8px 0 8px',
+            borderBottom: conversationLoading ? '1px solid #f0f0f0' : 'none'
+          }}>
+            <Button 
+              type="text" 
+              size="small"
+              icon={<ReloadOutlined />}
+              onClick={async () => {
+                try {
+                  clearError();
+                  await refreshConversations({ 
+                    showSuccess: true, 
+                    force: true 
+                  });
+                } catch (error: any) {
+                  console.error('刷新会话列表失败:', error);
+                  // 错误已在refreshConversations中处理
+                }
+              }}
+              loading={conversationLoading}
+              disabled={operationLoading.creating || operationLoading.switching || operationLoading.deleting !== null}
+              title="刷新会话列表"
+            />
+          </div>
+        )}
+        
+        {/* 加载指示器 */}
+        {conversationLoading && conversations.length > 0 && (
+          <div style={{ 
+            position: 'absolute', 
+            top: isAuthenticated && conversations.length > 0 ? '40px' : '0', 
+            left: 0, 
+            right: 0, 
+            height: '2px', 
+            background: 'linear-gradient(90deg, #1677ff 0%, #69c0ff 100%)',
+            zIndex: 10,
+            opacity: 0.8
+          }}>
+            <div style={{
+              height: '100%',
+              width: '30%',
+              background: 'linear-gradient(90deg, transparent 0%, #ffffff 50%, transparent 100%)',
+              animation: 'loading-shimmer 1.5s ease-in-out infinite'
+            }} />
+          </div>
+        )}
+
+        {!isAuthenticated ? (
+          <div style={{ padding: '20px', textAlign: 'center', color: '#999' }}>
+            请登录查看会话列表
+          </div>
+        ) : conversationError ? (
+          <div style={{ padding: '20px', textAlign: 'center' }}>
+            {/* 网络状态指示器 */}
+            {!isOnline && (
+              <div style={{ 
+                background: '#fff2e8', 
+                border: '1px solid #ffbb96', 
+                borderRadius: '6px',
+                padding: '8px 12px',
+                marginBottom: '16px',
+                fontSize: '12px',
+                color: '#d46b08'
+              }}>
+                🌐 网络连接已断开，请检查网络后重试
+              </div>
+            )}
+            
+            <div style={{ 
+              fontSize: '32px', 
+              color: '#ff4d4f', 
+              marginBottom: '12px',
+              lineHeight: 1
+            }}>
+              ⚠️
+            </div>
+            <div style={{ color: '#ff4d4f', marginBottom: '12px', fontSize: '14px', fontWeight: 500 }}>
+              {conversationError.message}
+            </div>
+            <div style={{ marginBottom: '16px' }}>
+              <Button 
+                size="small" 
+                type="primary" 
+                icon={<ReloadOutlined />}
+                onClick={async () => {
+                  try {
+                    clearError();
+                    await fetchConversations();
+                    message.success('重新加载成功');
+                  } catch (error: any) {
+                    console.error('重试获取会话列表失败:', error);
                   }
-                }, 200);
+                }}
+                loading={conversationLoading}
+                disabled={!isOnline}
+              >
+                {isOnline ? '重试' : '网络断开'}
+              </Button>
+            </div>
+            <div style={{ color: '#999', fontSize: '12px', lineHeight: 1.4 }}>
+              {isOnline 
+                ? '如果问题持续存在，请稍后再试或联系技术支持' 
+                : '请检查网络连接后重试'
+              }
+            </div>
+          </div>
+        ) : conversationLoading && conversations.length === 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 20px' }}>
+            <Spin size="default" />
+            <div style={{ marginTop: '16px', color: '#999', fontSize: '14px' }}>
+              加载会话列表中...
+            </div>
+            <div style={{ marginTop: '4px', color: '#bbb', fontSize: '12px' }}>
+              首次加载可能需要几秒钟
+            </div>
+          </div>
+        ) : conversations.length === 0 ? (
+          <div style={{ padding: '40px 20px', textAlign: 'center' }}>
+            <div style={{ 
+              fontSize: '48px', 
+              color: '#f0f0f0', 
+              marginBottom: '16px',
+              lineHeight: 1
+            }}>
+              💬
+            </div>
+            <div style={{ color: '#999', marginBottom: '8px', fontSize: '14px' }}>
+              暂无会话
+            </div>
+            <div style={{ color: '#bbb', fontSize: '12px', lineHeight: 1.4 }}>
+              点击上方"新建会话"按钮<br />开始您的第一次对话
+            </div>
+          </div>
+        ) : (
+        <div style={{ 
+          position: 'relative',
+          opacity: operationLoading.switching ? 0.6 : 1,
+          transition: 'opacity 0.2s ease'
+        }}>
+          {operationLoading.switching && (
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 100,
+              background: 'rgba(255, 255, 255, 0.9)',
+              borderRadius: '6px',
+              padding: '8px 12px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              fontSize: '12px',
+              color: '#666'
+            }}>
+              <Spin size="small" />
+              切换中...
+            </div>
+          )}
+          
+          <Conversations
+            items={conversations.map(conv => ({
+              ...conv,
+              disabled: conv.disabled || operationLoading.deleting === conv.key || operationLoading.switching,
+              label: operationLoading.deleting === conv.key ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <Spin size="small" />
+                  <span style={{ opacity: 0.6 }}>{conv.label}</span>
+                </div>
+              ) : conv.label
+            }))}  // 会话列表数据
+            className={styles.conversations}
+            activeKey={activeConversationId || undefined}  // 当前激活的会话
+          onActiveChange={async (val) => {
+            if (operationLoading.switching || operationLoading.deleting) {
+              return; // 如果正在进行其他操作，阻止切换
+            }
+            
+            setOperationLoading(prev => ({ ...prev, switching: true }));
+            
+            try {
+              abortController.current?.abort();  // 取消当前请求
+              // 中止执行会触发异步的 requestFallback，可能导致时序问题
+              // 在未来版本中，将添加 sessionId 功能来解决这个问题
+              setTimeout(() => {
+                setActiveConversation(val);  // 切换会话
+                setMessages(messageHistory?.[val] || []);  // 加载对应会话的消息历史
+                setOperationLoading(prev => ({ ...prev, switching: false }));
+              }, 100);
+            } catch (error) {
+              console.error('切换会话失败:', error);
+              setOperationLoading(prev => ({ ...prev, switching: false }));
+            }
+          }}
+          groupable  // 启用分组功能
+          styles={{ item: { padding: '0 8px' } }}
+          // 会话右键菜单配置
+          menu={(conversation) => ({
+            items: [
+              {
+                label: 'Rename',  // 重命名
+                key: 'rename',
+                icon: <EditOutlined />,
               },
-            },
-          ],
-        })}
-      />
+              {
+                label: 'Delete',  // 删除
+                key: 'delete',
+                icon: <DeleteOutlined />,
+                danger: true,  // 危险操作样式
+                onClick: () => {
+                  // 显示删除确认对话框
+                  Modal.confirm({
+                    title: '确认删除会话',
+                    content: `确定要删除会话"${typeof conversation.label === 'string' ? conversation.label : '未命名会话'}"吗？此操作无法撤销。`,
+                    okText: '删除',
+                    okType: 'danger',
+                    cancelText: '取消',
+                    icon: <DeleteOutlined />,
+                    onOk: async () => {
+                      setOperationLoading(prev => ({ ...prev, deleting: conversation.key }));
+                      
+                      try {
+                        await deleteConversation(conversation.key, {
+                          showSuccess: true,
+                          showError: true,
+                          optimistic: true
+                        });
+                        // 如果删除的是当前活跃会话，清空消息历史
+                        if (conversation.key === activeConversationId) {
+                          setMessages([]);
+                        }
+                        clearError(); // 清除任何现有错误
+                      } catch (error: any) {
+                        console.error('删除会话失败:', error);
+                        // 错误已在context中处理，这里不需要重复显示
+                        throw error; // 重新抛出错误以阻止对话框关闭
+                      } finally {
+                        setOperationLoading(prev => ({ ...prev, deleting: null }));
+                      }
+                    },
+                  });
+                },
+              },
+            ],
+          })}
+        />
+        </div>
+        )}
+      </div>
 
       {/* 侧边栏底部 */}
       <div className={styles.siderFooter}>
@@ -552,7 +894,14 @@ const Independent: React.FC = () => {
           onSubmit(inputValue);  // 提交消息
           setInputValue('');     // 清空输入框
         }}
-        onChange={setInputValue}  // 输入值变化
+        onChange={(value) => {
+          setInputValue(value);  // 输入值变化
+          
+          // 当用户输入时，更新会话活动状态（防抖处理在hook内部）
+          if (activeConversationId && value.trim()) {
+            onUserTyping(activeConversationId);
+          }
+        }}
         onCancel={() => {
           abortController.current?.abort();  // 取消请求
         }}
@@ -581,27 +930,56 @@ const Independent: React.FC = () => {
     </>
   );
 
-  // 监听消息变化，保存到历史记录
+  // 监听消息变化，保存到历史记录并更新会话状态
   useEffect(() => {
     // 消息历史记录模拟
-    if (messages?.length) {
+    if (messages?.length && activeConversationId) {
       setMessageHistory((prev) => ({
         ...prev,
-        [curConversation]: messages,  // 将当前会话的消息保存到历史记录
+        [activeConversationId]: messages,  // 将当前会话的消息保存到历史记录
       }));
+
+      // 检查是否有新的助手消息完成
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage && lastMessage.message.role === 'assistant' && lastMessage.status !== 'loading') {
+        // 助手消息完成，更新会话状态
+        onMessageAdded(
+          activeConversationId, 
+          lastMessage.message.content, 
+          'assistant',
+          {
+            skipSync: false,
+            batchUpdate: false // 立即更新以反映最新状态
+          }
+        );
+      }
     }
-  }, [messages, curConversation]);
+  }, [messages, activeConversationId, onMessageAdded]);
+
+  // 显示会话错误信息（仅在操作失败时显示toast，列表错误在UI中显示）
+  useEffect(() => {
+    if (conversationError && (operationLoading.creating || operationLoading.deleting || operationLoading.switching)) {
+      // 只在执行操作时显示错误toast，避免重复显示
+      message.error(conversationError.message);
+    }
+  }, [conversationError, operationLoading]);
 
   // ==================== 渲染组件 =================
   return (
-    <div className={styles.layout}>
-      {chatSider}  {/* 左侧边栏 */}
+    <ErrorBoundary level="page" showErrorDetails={process.env.NODE_ENV === 'development'}>
+      <div className={styles.layout}>
+        {chatSider}  {/* 左侧边栏 */}
 
-      <div className={styles.chat}>
-        {chatList}    {/* 聊天消息列表 */}
-        {chatSender}  {/* 消息发送器 */}
+        <div className={styles.chat}>
+          <ErrorBoundary level="feature">
+            {chatList}    {/* 聊天消息列表 */}
+          </ErrorBoundary>
+          <ErrorBoundary level="component">
+            {chatSender}  {/* 消息发送器 */}
+          </ErrorBoundary>
+        </div>
       </div>
-    </div>
+    </ErrorBoundary>
   );
 };
 
