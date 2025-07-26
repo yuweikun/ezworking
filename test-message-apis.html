@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>消息API测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+        
+        .test-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        button:hover {
+            background-color: #0056b3;
+        }
+        
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        
+        .message-list {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 15px;
+            background-color: #fafafa;
+        }
+        
+        .message-item {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+        
+        .message-item.user {
+            border-left-color: #28a745;
+            background-color: #f8fff9;
+        }
+        
+        .message-item.assistant {
+            border-left-color: #007bff;
+            background-color: #f8f9ff;
+        }
+        
+        .message-meta {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .message-content {
+            font-size: 14px;
+            margin-bottom: 5px;
+        }
+        
+        .workflow-stage {
+            font-size: 11px;
+            color: #888;
+            background-color: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            display: inline-block;
+        }
+        
+        .batch-message {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 10px;
+            background-color: #f9f9f9;
+        }
+        
+        .batch-message-header {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        
+        .remove-btn {
+            background-color: #dc3545;
+            font-size: 12px;
+            padding: 5px 10px;
+            float: right;
+        }
+        
+        .remove-btn:hover {
+            background-color: #c82333;
+        }
+        
+        .add-btn {
+            background-color: #28a745;
+        }
+        
+        .add-btn:hover {
+            background-color: #218838;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>消息API测试</h1>
+            <p>测试单条和批量消息插入API</p>
+        </div>
+
+        <!-- 认证和会话设置 -->
+        <div class="test-section">
+            <div class="test-title">1. 认证和会话设置</div>
+            <button onclick="login()">登录</button>
+            <button onclick="createSession()">创建测试会话</button>
+            <button onclick="listSessions()">获取会话列表</button>
+            <div class="form-group">
+                <label>当前会话:</label>
+                <select id="sessionSelect">
+                    <option value="">请选择会话</option>
+                </select>
+            </div>
+            <div id="authResult" class="result info" style="display: none;"></div>
+        </div>
+
+        <!-- 单条消息插入 -->
+        <div class="test-section">
+            <div class="test-title">2. 单条消息插入</div>
+            <div class="form-group">
+                <label>角色:</label>
+                <select id="singleRole">
+                    <option value="user">用户</option>
+                    <option value="assistant">助手</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>消息内容:</label>
+                <textarea id="singleContent" rows="3" placeholder="输入消息内容...">你好，这是一条测试消息</textarea>
+            </div>
+            <div class="form-group">
+                <label>工作流阶段 (JSON, 可选):</label>
+                <textarea id="singleWorkflowStage" rows="2" placeholder='{"stage": "test", "step": 1}'>{"stage": "test", "step": 1}</textarea>
+            </div>
+            <button onclick="createSingleMessage()">插入单条消息</button>
+            <div id="singleResult" class="result info" style="display: none;"></div>
+        </div>
+
+        <!-- 批量消息插入 -->
+        <div class="test-section">
+            <div class="test-title">3. 批量消息插入</div>
+            <div id="batchMessages">
+                <!-- 批量消息将在这里动态生成 -->
+            </div>
+            <button onclick="addBatchMessage()" class="add-btn">添加消息</button>
+            <button onclick="createBatchMessages()">批量插入消息</button>
+            <button onclick="clearBatchMessages()">清空消息</button>
+            <div id="batchResult" class="result info" style="display: none;"></div>
+        </div>
+
+        <!-- 消息列表显示 -->
+        <div class="test-section">
+            <div class="test-title">4. 消息列表</div>
+            <button onclick="loadMessages()">加载消息</button>
+            <button onclick="clearMessageList()">清空显示</button>
+            <div class="message-list" id="messageList">
+                <div class="message-item info">消息将显示在这里...</div>
+            </div>
+        </div>
+
+        <!-- 错误测试 -->
+        <div class="test-section">
+            <div class="test-title">5. 错误情况测试</div>
+            <button onclick="testInvalidSession()">测试无效会话ID</button>
+            <button onclick="testInvalidRole()">测试无效角色</button>
+            <button onclick="testEmptyContent()">测试空内容</button>
+            <button onclick="testEmptyBatch()">测试空批量数组</button>
+            <div id="errorResult" class="result info" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentToken = null;
+        let currentSessionId = null;
+        let batchMessageCount = 0;
+
+        // 显示结果
+        function showResult(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = `result ${type}`;
+            element.textContent = message;
+        }
+
+        // API调用辅助函数
+        async function apiCall(url, method = 'GET', body = null) {
+            const options = {
+                method,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            };
+
+            if (currentToken) {
+                options.headers['Authorization'] = `Bearer ${currentToken}`;
+            }
+
+            if (body) {
+                options.body = JSON.stringify(body);
+            }
+
+            const response = await fetch(url, options);
+            const data = await response.json();
+            
+            return { response, data };
+        }
+
+        // 登录
+        async function login() {
+            try {
+                const { response, data } = await apiCall('/api/auth/login', 'POST', {
+                    email: 'test@example.com',
+                    password: 'password123'
+                });
+
+                if (response.ok && data.success) {
+                    currentToken = data.token;
+                    showResult('authResult', `登录成功！用户: ${data.user.email}`, 'success');
+                } else {
+                    showResult('authResult', `登录失败: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showResult('authResult', `登录错误: ${error.message}`, 'error');
+            }
+        }
+
+        // 创建会话
+        async function createSession() {
+            if (!currentToken) {
+                showResult('authResult', '请先登录', 'error');
+                return;
+            }
+
+            try {
+                const { response, data } = await apiCall('/api/sessions', 'POST', {
+                    title: '消息API测试会话'
+                });
+
+                if (response.ok && data.success) {
+                    currentSessionId = data.data.id;
+                    showResult('authResult', `会话创建成功！ID: ${currentSessionId}`, 'success');
+                    await listSessions();
+                } else {
+                    showResult('authResult', `创建会话失败: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showResult('authResult', `创建会话错误: ${error.message}`, 'error');
+            }
+        }
+
+        // 获取会话列表
+        async function listSessions() {
+            if (!currentToken) {
+                showResult('authResult', '请先登录', 'error');
+                return;
+            }
+
+            try {
+                const { response, data } = await apiCall('/api/sessions');
+
+                if (response.ok && data.success) {
+                    const select = document.getElementById('sessionSelect');
+                    select.innerHTML = '<option value="">请选择会话</option>';
+                    
+                    data.data.forEach(session => {
+                        const option = document.createElement('option');
+                        option.value = session.id;
+                        option.textContent = `${session.title} (${new Date(session.created_at).toLocaleString()})`;
+                        if (session.id === currentSessionId) {
+                            option.selected = true;
+                        }
+                        select.appendChild(option);
+                    });
+
+                    showResult('authResult', `获取到 ${data.data.length} 个会话`, 'success');
+                } else {
+                    showResult('authResult', `获取会话失败: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showResult('authResult', `获取会话错误: ${error.message}`, 'error');
+            }
+        }
+
+        // 会话选择变化
+        document.getElementById('sessionSelect').addEventListener('change', function() {
+            currentSessionId = this.value;
+            if (currentSessionId) {
+                loadMessages();
+            }
+        });
+
+        // 创建单条消息
+        async function createSingleMessage() {
+            if (!currentToken) {
+                showResult('singleResult', '请先登录', 'error');
+                return;
+            }
+
+            if (!currentSessionId) {
+                showResult('singleResult', '请先选择会话', 'error');
+                return;
+            }
+
+            const role = document.getElementById('singleRole').value;
+            const content = document.getElementById('singleContent').value.trim();
+            const workflowStageText = document.getElementById('singleWorkflowStage').value.trim();
+
+            if (!content) {
+                showResult('singleResult', '请输入消息内容', 'error');
+                return;
+            }
+
+            let workflowStage = null;
+            if (workflowStageText) {
+                try {
+                    workflowStage = JSON.parse(workflowStageText);
+                } catch (error) {
+                    showResult('singleResult', '工作流阶段JSON格式错误', 'error');
+                    return;
+                }
+            }
+
+            try {
+                const { response, data } = await apiCall('/api/messages/create', 'POST', {
+                    session_id: currentSessionId,
+                    role,
+                    content,
+                    workflow_stage: workflowStage
+                });
+
+                if (response.ok && data.success) {
+                    showResult('singleResult', `消息创建成功！ID: ${data.data.id}`, 'success');
+                    loadMessages(); // 刷新消息列表
+                } else {
+                    showResult('singleResult', `创建消息失败: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showResult('singleResult', `创建消息错误: ${error.message}`, 'error');
+            }
+        }
+
+        // 添加批量消息
+        function addBatchMessage() {
+            batchMessageCount++;
+            const container = document.getElementById('batchMessages');
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'batch-message';
+            messageDiv.id = `batchMessage${batchMessageCount}`;
+            
+            messageDiv.innerHTML = `
+                <div class="batch-message-header">
+                    消息 ${batchMessageCount}
+                    <button class="remove-btn" onclick="removeBatchMessage(${batchMessageCount})">删除</button>
+                </div>
+                <div class="form-group">
+                    <label>角色:</label>
+                    <select id="batchRole${batchMessageCount}">
+                        <option value="user">用户</option>
+                        <option value="assistant">助手</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>内容:</label>
+                    <textarea id="batchContent${batchMessageCount}" rows="2" placeholder="输入消息内容...">批量消息 ${batchMessageCount}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>工作流阶段 (JSON, 可选):</label>
+                    <textarea id="batchWorkflow${batchMessageCount}" rows="1" placeholder='{"stage": "batch", "step": ${batchMessageCount}}'>{"stage": "batch", "step": ${batchMessageCount}}</textarea>
+                </div>
+            `;
+            
+            container.appendChild(messageDiv);
+        }
+
+        // 删除批量消息
+        function removeBatchMessage(id) {
+            const element = document.getElementById(`batchMessage${id}`);
+            if (element) {
+                element.remove();
+            }
+        }
+
+        // 清空批量消息
+        function clearBatchMessages() {
+            document.getElementById('batchMessages').innerHTML = '';
+            batchMessageCount = 0;
+        }
+
+        // 创建批量消息
+        async function createBatchMessages() {
+            if (!currentToken) {
+                showResult('batchResult', '请先登录', 'error');
+                return;
+            }
+
+            if (!currentSessionId) {
+                showResult('batchResult', '请先选择会话', 'error');
+                return;
+            }
+
+            const messages = [];
+            const container = document.getElementById('batchMessages');
+            const messageElements = container.querySelectorAll('.batch-message');
+
+            if (messageElements.length === 0) {
+                showResult('batchResult', '请先添加消息', 'error');
+                return;
+            }
+
+            for (const element of messageElements) {
+                const id = element.id.replace('batchMessage', '');
+                const role = document.getElementById(`batchRole${id}`).value;
+                const content = document.getElementById(`batchContent${id}`).value.trim();
+                const workflowText = document.getElementById(`batchWorkflow${id}`).value.trim();
+
+                if (!content) {
+                    showResult('batchResult', `消息 ${id} 内容不能为空`, 'error');
+                    return;
+                }
+
+                let workflowStage = null;
+                if (workflowText) {
+                    try {
+                        workflowStage = JSON.parse(workflowText);
+                    } catch (error) {
+                        showResult('batchResult', `消息 ${id} 工作流阶段JSON格式错误`, 'error');
+                        return;
+                    }
+                }
+
+                messages.push({
+                    role,
+                    content,
+                    workflow_stage: workflowStage
+                });
+            }
+
+            try {
+                const { response, data } = await apiCall('/api/messages/batch', 'POST', {
+                    session_id: currentSessionId,
+                    messages
+                });
+
+                if (response.ok && data.success) {
+                    showResult('batchResult', `批量创建成功！插入了 ${data.data.inserted_count} 条消息`, 'success');
+                    loadMessages(); // 刷新消息列表
+                } else {
+                    showResult('batchResult', `批量创建失败: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showResult('batchResult', `批量创建错误: ${error.message}`, 'error');
+            }
+        }
+
+        // 加载消息
+        async function loadMessages() {
+            if (!currentToken) {
+                showResult('messageList', '请先登录', 'error');
+                return;
+            }
+
+            if (!currentSessionId) {
+                showResult('messageList', '请先选择会话', 'error');
+                return;
+            }
+
+            try {
+                const { response, data } = await apiCall(`/api/messages?session_id=${currentSessionId}`);
+
+                if (response.ok && data.success) {
+                    const container = document.getElementById('messageList');
+                    container.innerHTML = '';
+
+                    if (data.data.history.length === 0) {
+                        container.innerHTML = '<div class="message-item info">该会话暂无消息</div>';
+                        return;
+                    }
+
+                    data.data.history.forEach(msg => {
+                        const messageDiv = document.createElement('div');
+                        messageDiv.className = `message-item ${msg.role}`;
+                        
+                        const timestamp = new Date(msg.created_at).toLocaleString();
+                        let workflowHtml = '';
+                        
+                        if (msg.workflow_stage) {
+                            try {
+                                const workflow = JSON.parse(msg.workflow_stage);
+                                workflowHtml = `<div class="workflow-stage">${JSON.stringify(workflow)}</div>`;
+                            } catch (e) {
+                                workflowHtml = `<div class="workflow-stage">${msg.workflow_stage}</div>`;
+                            }
+                        }
+
+                        messageDiv.innerHTML = `
+                            <div class="message-meta">${timestamp} - ${msg.role}</div>
+                            <div class="message-content">${msg.content}</div>
+                            ${workflowHtml}
+                        `;
+                        
+                        container.appendChild(messageDiv);
+                    });
+                } else {
+                    showResult('messageList', `加载消息失败: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showResult('messageList', `加载消息错误: ${error.message}`, 'error');
+            }
+        }
+
+        // 清空消息列表显示
+        function clearMessageList() {
+            document.getElementById('messageList').innerHTML = '<div class="message-item info">消息将显示在这里...</div>';
+        }
+
+        // 错误测试函数
+        async function testInvalidSession() {
+            try {
+                const { response, data } = await apiCall('/api/messages/create', 'POST', {
+                    session_id: 'invalid-session-id',
+                    role: 'user',
+                    content: '这应该失败'
+                });
+
+                showResult('errorResult', `无效会话ID测试: ${data.message} (状态码: ${response.status})`, response.ok ? 'error' : 'success');
+            } catch (error) {
+                showResult('errorResult', `无效会话ID测试错误: ${error.message}`, 'error');
+            }
+        }
+
+        async function testInvalidRole() {
+            if (!currentSessionId) {
+                showResult('errorResult', '请先选择会话', 'error');
+                return;
+            }
+
+            try {
+                const { response, data } = await apiCall('/api/messages/create', 'POST', {
+                    session_id: currentSessionId,
+                    role: 'invalid_role',
+                    content: '这应该失败'
+                });
+
+                showResult('errorResult', `无效角色测试: ${data.message} (状态码: ${response.status})`, response.ok ? 'error' : 'success');
+            } catch (error) {
+                showResult('errorResult', `无效角色测试错误: ${error.message}`, 'error');
+            }
+        }
+
+        async function testEmptyContent() {
+            if (!currentSessionId) {
+                showResult('errorResult', '请先选择会话', 'error');
+                return;
+            }
+
+            try {
+                const { response, data } = await apiCall('/api/messages/create', 'POST', {
+                    session_id: currentSessionId,
+                    role: 'user',
+                    content: ''
+                });
+
+                showResult('errorResult', `空内容测试: ${data.message} (状态码: ${response.status})`, response.ok ? 'error' : 'success');
+            } catch (error) {
+                showResult('errorResult', `空内容测试错误: ${error.message}`, 'error');
+            }
+        }
+
+        async function testEmptyBatch() {
+            if (!currentSessionId) {
+                showResult('errorResult', '请先选择会话', 'error');
+                return;
+            }
+
+            try {
+                const { response, data } = await apiCall('/api/messages/batch', 'POST', {
+                    session_id: currentSessionId,
+                    messages: []
+                });
+
+                showResult('errorResult', `空批量数组测试: ${data.message} (状态码: ${response.status})`, response.ok ? 'error' : 'success');
+            } catch (error) {
+                showResult('errorResult', `空批量数组测试错误: ${error.message}`, 'error');
+            }
+        }
+
+        // 页面加载时初始化
+        window.addEventListener('load', function() {
+            // 添加一些默认的批量消息示例
+            addBatchMessage();
+            addBatchMessage();
+            
+            // 设置默认值
+            document.getElementById('batchRole1').value = 'user';
+            document.getElementById('batchContent1').value = '你好，这是第一条批量消息';
+            
+            document.getElementById('batchRole2').value = 'assistant';
+            document.getElementById('batchContent2').value = '你好！我收到了你的批量消息。';
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>严格消息流程测试 - 增强版</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #1677ff;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .flow-diagram {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .step {
+            display: flex;
+            align-items: center;
+            margin: 12px 0;
+            padding: 12px;
+            border-radius: 6px;
+            transition: all 0.3s ease;
+        }
+        
+        .step.active {
+            background: #e6f7ff;
+            border: 1px solid #91d5ff;
+            transform: translateX(5px);
+        }
+        
+        .step.completed {
+            background: #f6ffed;
+            border: 1px solid #b7eb8f;
+        }
+        
+        .step.error {
+            background: #fff2f0;
+            border: 1px solid #ffccc7;
+        }
+        
+        .step-number {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #1677ff;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: bold;
+            margin-right: 12px;
+            flex-shrink: 0;
+        }
+        
+        .step.completed .step-number {
+            background: #52c41a;
+        }
+        
+        .step.error .step-number {
+            background: #ff4d4f;
+        }
+        
+        .step-content {
+            flex: 1;
+        }
+        
+        .step-title {
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        
+        .step-description {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .step-status {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-left: 12px;
+        }
+        
+        .status-waiting {
+            background: #f0f0f0;
+            color: #666;
+        }
+        
+        .status-processing {
+            background: #e6f7ff;
+            color: #1677ff;
+        }
+        
+        .status-completed {
+            background: #f6ffed;
+            color: #52c41a;
+        }
+        
+        .status-error {
+            background: #fff2f0;
+            color: #ff4d4f;
+        }
+        
+        .controls {
+            text-align: center;
+            margin: 30px 0;
+        }
+        
+        .btn {
+            background: #1677ff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            margin: 0 10px;
+            transition: background 0.3s ease;
+        }
+        
+        .btn:hover {
+            background: #4096ff;
+        }
+        
+        .btn:disabled {
+            background: #d9d9d9;
+            cursor: not-allowed;
+        }
+        
+        .btn.danger {
+            background: #ff4d4f;
+        }
+        
+        .btn.danger:hover {
+            background: #ff7875;
+        }
+        
+        .timeline {
+            margin: 20px 0;
+            padding: 20px;
+            background: #fafafa;
+            border-radius: 8px;
+            border-left: 4px solid #1677ff;
+        }
+        
+        .timeline-item {
+            margin: 8px 0;
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .timeline-time {
+            color: #1677ff;
+            font-weight: 500;
+        }
+        
+        .message-preview {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 16px 0;
+        }
+        
+        .message-bubble {
+            background: white;
+            border-radius: 12px;
+            padding: 12px 16px;
+            margin: 8px 0;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .message-bubble.user {
+            background: #1677ff;
+            color: white;
+            margin-left: 60px;
+        }
+        
+        .message-bubble.assistant {
+            background: white;
+            margin-right: 60px;
+        }
+        
+        .loading-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #1677ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .strict-notice {
+            background: #fff7e6;
+            border: 1px solid #ffd591;
+            border-radius: 8px;
+            padding: 16px;
+            margin: 20px 0;
+        }
+        
+        .strict-notice h3 {
+            color: #d46b08;
+            margin: 0 0 8px 0;
+        }
+        
+        .strict-notice p {
+            margin: 4px 0;
+            color: #8c4a00;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔒 严格消息流程测试</h1>
+        
+        <div class="strict-notice">
+            <h3>⚠️ 严格流程说明</h3>
+            <p>• 用户消息必须完全上传到数据库后，AI才能开始响应</p>
+            <p>• AI响应必须完全上传到数据库后，用户才能继续聊天</p>
+            <p>• 任何步骤失败都会阻止后续操作</p>
+            <p>• 每个步骤都有明确的状态反馈</p>
+        </div>
+        
+        <div class="flow-diagram">
+            <h3>📋 消息流程步骤</h3>
+            
+            <div class="step" id="step-1">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <div class="step-title">用户发送消息</div>
+                    <div class="step-description">立即渲染用户消息气泡</div>
+                </div>
+                <div class="step-status status-waiting">等待中</div>
+            </div>
+            
+            <div class="step" id="step-2">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <div class="step-title">上传用户消息</div>
+                    <div class="step-description">严格等待用户消息上传到数据库完成</div>
+                </div>
+                <div class="step-status status-waiting">等待中</div>
+            </div>
+            
+            <div class="step" id="step-3">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <div class="step-title">AI开始响应</div>
+                    <div class="step-description">用户消息保存成功后，AI才开始响应</div>
+                </div>
+                <div class="step-status status-waiting">等待中</div>
+            </div>
+            
+            <div class="step" id="step-4">
+                <div class="step-number">4</div>
+                <div class="step-content">
+                    <div class="step-title">实时渲染AI回复</div>
+                    <div class="step-description">立即渲染AI消息气泡，流式显示内容</div>
+                </div>
+                <div class="step-status status-waiting">等待中</div>
+            </div>
+            
+            <div class="step" id="step-5">
+                <div class="step-number">5</div>
+                <div class="step-content">
+                    <div class="step-title">上传AI消息</div>
+                    <div class="step-description">AI响应完成后，严格等待AI消息上传到数据库</div>
+                </div>
+                <div class="step-status status-waiting">等待中</div>
+            </div>
+            
+            <div class="step" id="step-6">
+                <div class="step-number">6</div>
+                <div class="step-content">
+                    <div class="step-title">用户可以继续聊天</div>
+                    <div class="step-description">所有存储操作完成后，重置状态允许用户继续</div>
+                </div>
+                <div class="step-status status-waiting">等待中</div>
+            </div>
+        </div>
+        
+        <div class="message-preview">
+            <h3>💬 消息预览</h3>
+            <div id="message-container">
+                <div class="message-bubble assistant">
+                    <em>等待用户发送消息...</em>
+                </div>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button class="btn" id="start-test" onclick="startStrictTest()">
+                开始严格流程测试
+            </button>
+            <button class="btn" id="simulate-error" onclick="simulateError()" disabled>
+                模拟存储失败
+            </button>
+            <button class="btn danger" onclick="resetTest()">
+                重置测试
+            </button>
+        </div>
+        
+        <div class="timeline" id="timeline">
+            <h3>⏱️ 执行时间线</h3>
+            <div id="timeline-content">
+                <div class="timeline-item">等待开始测试...</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentStep = 0;
+        let startTime = Date.now();
+        let isStoringMessages = false;
+        let simulateStorageError = false;
+        
+        function addTimelineItem(message) {
+            const timeline = document.getElementById('timeline-content');
+            const elapsed = Date.now() - startTime;
+            const item = document.createElement('div');
+            item.className = 'timeline-item';
+            item.innerHTML = `<span class="timeline-time">[${elapsed}ms]</span> ${message}`;
+            timeline.appendChild(item);
+            timeline.scrollTop = timeline.scrollHeight;
+        }
+        
+        function updateStep(stepNum, status, statusText) {
+            const step = document.getElementById(`step-${stepNum}`);
+            const statusEl = step.querySelector('.step-status');
+            
+            // 移除所有状态类
+            step.classList.remove('active', 'completed', 'error');
+            statusEl.classList.remove('status-waiting', 'status-processing', 'status-completed', 'status-error');
+            
+            // 添加新状态
+            step.classList.add(status);
+            statusEl.classList.add(`status-${status}`);
+            statusEl.textContent = statusText;
+            
+            if (status === 'processing') {
+                statusEl.innerHTML = '<div class="loading-indicator"></div>' + statusText;
+            }
+        }
+        
+        function addMessage(role, content) {
+            const container = document.getElementById('message-container');
+            const bubble = document.createElement('div');
+            bubble.className = `message-bubble ${role}`;
+            bubble.textContent = content;
+            container.appendChild(bubble);
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        function updateMessage(content) {
+            const container = document.getElementById('message-container');
+            const lastBubble = container.lastElementChild;
+            if (lastBubble && lastBubble.classList.contains('assistant')) {
+                lastBubble.textContent = content;
+            }
+        }
+        
+        async function simulateStoreMessage(role, content) {
+            addTimelineItem(`开始存储${role === 'user' ? '用户' : 'AI'}消息到数据库...`);
+            
+            // 模拟网络延迟
+            await new Promise(resolve => setTimeout(resolve, 800 + Math.random() * 400));
+            
+            if (simulateStorageError && role === 'user') {
+                addTimelineItem(`❌ ${role === 'user' ? '用户' : 'AI'}消息存储失败`);
+                throw new Error('存储失败');
+            }
+            
+            addTimelineItem(`✅ ${role === 'user' ? '用户' : 'AI'}消息存储成功`);
+            return true;
+        }
+        
+        async function simulateAIResponse() {
+            addTimelineItem('🤖 AI开始生成响应...');
+            
+            const responses = [
+                "你好！我是AI助手。",
+                "你好！我是AI助手。我可以帮助你解答问题。",
+                "你好！我是AI助手。我可以帮助你解答问题。有什么我可以为你做的吗？"
+            ];
+            
+            // 模拟流式响应
+            for (let i = 0; i < responses.length; i++) {
+                await new Promise(resolve => setTimeout(resolve, 300));
+                updateMessage(responses[i]);
+                addTimelineItem(`📝 AI响应更新: ${responses[i].length} 字符`);
+            }
+            
+            addTimelineItem('✅ AI响应完成');
+            return responses[responses.length - 1];
+        }
+        
+        async function startStrictTest() {
+            const startBtn = document.getElementById('start-test');
+            const errorBtn = document.getElementById('simulate-error');
+            
+            startBtn.disabled = true;
+            errorBtn.disabled = false;
+            isStoringMessages = true;
+            startTime = Date.now();
+            
+            // 清空时间线
+            document.getElementById('timeline-content').innerHTML = '';
+            document.getElementById('message-container').innerHTML = '';
+            
+            addTimelineItem('🚀 开始严格消息流程测试');
+            
+            try {
+                // 步骤1: 用户发送消息 - 立即渲染
+                addTimelineItem('👤 用户发送消息: "你好"');
+                updateStep(1, 'active', '处理中');
+                addMessage('user', '你好');
+                await new Promise(resolve => setTimeout(resolve, 100));
+                updateStep(1, 'completed', '已完成');
+                addTimelineItem('✅ 用户消息气泡立即渲染完成');
+                
+                // 步骤2: 严格等待用户消息上传完成
+                updateStep(2, 'active', '上传中');
+                addMessage('assistant', '💾 正在保存您的消息...');
+                
+                try {
+                    await simulateStoreMessage('user', '你好');
+                    updateStep(2, 'completed', '已完成');
+                    addTimelineItem('✅ 用户消息上传完成，AI可以开始响应');
+                } catch (error) {
+                    updateStep(2, 'error', '失败');
+                    updateMessage('❌ 用户消息保存失败，请重试');
+                    addTimelineItem('❌ 流程因用户消息存储失败而终止');
+                    throw error;
+                }
+                
+                // 步骤3: AI开始响应
+                updateStep(3, 'active', '启动中');
+                updateMessage('正在思考中...');
+                await new Promise(resolve => setTimeout(resolve, 200));
+                updateStep(3, 'completed', '已完成');
+                addTimelineItem('🤖 AI响应已启动');
+                
+                // 步骤4: 实时渲染AI回复
+                updateStep(4, 'active', '响应中');
+                const aiResponse = await simulateAIResponse();
+                updateStep(4, 'completed', '已完成');
+                
+                // 步骤5: 严格等待AI消息上传完成
+                updateStep(5, 'active', '上传中');
+                updateMessage(aiResponse + '\n\n💾 正在保存AI回复...');
+                
+                try {
+                    await simulateStoreMessage('assistant', aiResponse);
+                    updateStep(5, 'completed', '已完成');
+                    updateMessage(aiResponse);
+                    addTimelineItem('✅ AI消息上传完成');
+                } catch (error) {
+                    updateStep(5, 'error', '失败');
+                    updateMessage(aiResponse + '\n\n⚠️ AI回复保存失败');
+                    addTimelineItem('⚠️ AI消息存储失败，但不阻止用户继续');
+                }
+                
+                // 步骤6: 用户可以继续聊天
+                updateStep(6, 'active', '重置中');
+                await new Promise(resolve => setTimeout(resolve, 300));
+                updateStep(6, 'completed', '已完成');
+                isStoringMessages = false;
+                
+                addTimelineItem('🎉 严格消息流程完成，用户现在可以继续聊天');
+                
+                const totalTime = Date.now() - startTime;
+                addTimelineItem(`⏱️ 总耗时: ${totalTime}ms`);
+                
+            } catch (error) {
+                isStoringMessages = false;
+                addTimelineItem(`💥 流程异常终止: ${error.message}`);
+            } finally {
+                startBtn.disabled = false;
+                errorBtn.disabled = true;
+                simulateStorageError = false;
+            }
+        }
+        
+        function simulateError() {
+            simulateStorageError = true;
+            document.getElementById('simulate-error').textContent = '已启用错误模拟';
+            addTimelineItem('⚠️ 已启用存储错误模拟');
+        }
+        
+        function resetTest() {
+            // 重置所有步骤
+            for (let i = 1; i <= 6; i++) {
+                updateStep(i, 'waiting', '等待中');
+            }
+            
+            // 清空内容
+            document.getElementById('timeline-content').innerHTML = 
+                '<div class="timeline-item">等待开始测试...</div>';
+            document.getElementById('message-container').innerHTML = 
+                '<div class="message-bubble assistant"><em>等待用户发送消息...</em></div>';
+            
+            // 重置状态
+            isStoringMessages = false;
+            simulateStorageError = false;
+            document.getElementById('start-test').disabled = false;
+            document.getElementById('simulate-error').disabled = true;
+            document.getElementById('simulate-error').textContent = '模拟存储失败';
+        }
+        
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            addTimelineItem('📋 严格消息流程测试页面已加载');
+            addTimelineItem('ℹ️ 点击"开始严格流程测试"按钮开始测试');
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端消息存储集成测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+        
+        .test-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        
+        button:hover {
+            background-color: #0056b3;
+        }
+        
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        
+        .chat-simulation {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            background-color: #fafafa;
+        }
+        
+        .message-flow {
+            margin-bottom: 20px;
+        }
+        
+        .flow-step {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-left: 4px solid #007bff;
+            background-color: white;
+            border-radius: 4px;
+        }
+        
+        .flow-step.user {
+            border-left-color: #28a745;
+        }
+        
+        .flow-step.assistant {
+            border-left-color: #007bff;
+        }
+        
+        .flow-step.storage {
+            border-left-color: #ffc107;
+            background-color: #fff9e6;
+        }
+        
+        .step-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .step-content {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .verification-section {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+        }
+        
+        .message-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: white;
+            border-radius: 4px;
+        }
+        
+        .message-item {
+            margin-bottom: 8px;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 13px;
+        }
+        
+        .message-item.user {
+            background-color: #e3f2fd;
+            border-left: 3px solid #2196f3;
+        }
+        
+        .message-item.assistant {
+            background-color: #f3e5f5;
+            border-left: 3px solid #9c27b0;
+        }
+        
+        .message-meta {
+            font-size: 11px;
+            color: #888;
+            margin-bottom: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>前端消息存储集成测试</h1>
+            <p>测试前端聊天功能与消息存储API的集成</p>
+        </div>
+
+        <!-- 认证和会话设置 -->
+        <div class="test-section">
+            <div class="test-title">1. 认证和会话准备</div>
+            <button onclick="setupTest()">初始化测试环境</button>
+            <button onclick="checkStatus()">检查状态</button>
+            <div id="setupResult" class="result info" style="display: none;"></div>
+        </div>
+
+        <!-- 聊天流程模拟 -->
+        <div class="test-section">
+            <div class="test-title">2. 聊天流程模拟</div>
+            <div class="chat-simulation">
+                <div class="form-group">
+                    <label>用户消息:</label>
+                    <textarea id="userMessage" rows="2" placeholder="输入用户消息...">你好，请介绍一下你自己</textarea>
+                </div>
+                
+                <button onclick="simulateChat()">模拟完整聊天流程</button>
+                <button onclick="clearSimulation()">清空模拟</button>
+                
+                <div class="message-flow" id="messageFlow">
+                    <div class="flow-step info">
+                        <div class="step-title">等待开始聊天流程...</div>
+                        <div class="step-content">点击"模拟完整聊天流程"开始测试</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 消息存储验证 -->
+        <div class="test-section">
+            <div class="test-title">3. 消息存储验证</div>
+            <button onclick="verifyStorage()">验证消息存储</button>
+            <button onclick="loadMessageHistory()">加载消息历史</button>
+            
+            <div class="verification-section">
+                <h4>数据库中的消息:</h4>
+                <div class="message-list" id="storedMessages">
+                    <div class="message-item info">消息将显示在这里...</div>
+                </div>
+            </div>
+            
+            <div id="verificationResult" class="result info" style="display: none;"></div>
+        </div>
+
+        <!-- 流程说明 -->
+        <div class="test-section">
+            <div class="test-title">4. 集成流程说明</div>
+            <div style="background-color: #f8f9fa; padding: 15px; border-radius: 4px;">
+                <h4>消息存储流程:</h4>
+                <ol>
+                    <li><strong>用户发送消息</strong> → 前端调用 <code>storeMessage()</code> 存储用户消息</li>
+                    <li><strong>调用AI API</strong> → 前端调用 <code>/api/chat/stream</code> 获取AI回复</li>
+                    <li><strong>AI回复完成</strong> → 前端调用 <code>storeMessage()</code> 存储AI回复</li>
+                    <li><strong>更新UI</strong> → 前端重新加载消息历史确保数据同步</li>
+                </ol>
+                
+                <h4>关键特性:</h4>
+                <ul>
+                    <li>每个聊天气泡对应数据库中的一条消息记录</li>
+                    <li>用户消息和AI回复分别存储</li>
+                    <li>支持工作流阶段信息存储</li>
+                    <li>自动更新会话时间戳</li>
+                    <li>会话切换时自动加载历史消息</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentToken = null;
+        let currentSessionId = null;
+
+        // 显示结果
+        function showResult(elementId, message, type = 'info') {
+            const element = document.getElementById(elementId);
+            element.style.display = 'block';
+            element.className = `result ${type}`;
+            element.textContent = message;
+        }
+
+        // 添加流程步骤
+        function addFlowStep(title, content, type = 'info') {
+            const flowContainer = document.getElementById('messageFlow');
+            const stepDiv = document.createElement('div');
+            stepDiv.className = `flow-step ${type}`;
+            stepDiv.innerHTML = `
+                <div class="step-title">${title}</div>
+                <div class="step-content">${content}</div>
+            `;
+            flowContainer.appendChild(stepDiv);
+            flowContainer.scrollTop = flowContainer.scrollHeight;
+        }
+
+        // API调用辅助函数
+        async function apiCall(url, method = 'GET', body = null) {
+            const options = {
+                method,
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            };
+
+            if (currentToken) {
+                options.headers['Authorization'] = `Bearer ${currentToken}`;
+            }
+
+            if (body) {
+                options.body = JSON.stringify(body);
+            }
+
+            const response = await fetch(url, options);
+            const data = await response.json();
+            
+            return { response, data };
+        }
+
+        // 初始化测试环境
+        async function setupTest() {
+            showResult('setupResult', '正在初始化测试环境...', 'info');
+
+            try {
+                // 1. 登录
+                const { response: loginResponse, data: loginData } = await apiCall('/api/auth/login', 'POST', {
+                    email: 'test@example.com',
+                    password: 'password123'
+                });
+
+                if (!loginResponse.ok || !loginData.success) {
+                    throw new Error(`登录失败: ${loginData.message}`);
+                }
+
+                currentToken = loginData.token;
+
+                // 2. 创建测试会话
+                const { response: sessionResponse, data: sessionData } = await apiCall('/api/sessions', 'POST', {
+                    title: '消息存储集成测试会话'
+                });
+
+                if (!sessionResponse.ok || !sessionData.success) {
+                    throw new Error(`创建会话失败: ${sessionData.message}`);
+                }
+
+                currentSessionId = sessionData.data.id;
+
+                showResult('setupResult', 
+                    `测试环境初始化成功！\n` +
+                    `用户: ${loginData.user.email}\n` +
+                    `会话ID: ${currentSessionId}\n` +
+                    `会话标题: ${sessionData.data.title}`, 
+                    'success'
+                );
+
+            } catch (error) {
+                showResult('setupResult', `初始化失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 检查状态
+        async function checkStatus() {
+            if (!currentToken) {
+                showResult('setupResult', '请先初始化测试环境', 'error');
+                return;
+            }
+
+            try {
+                const { response, data } = await apiCall('/api/auth/verify');
+                
+                if (response.ok && data.success) {
+                    showResult('setupResult', 
+                        `状态检查通过！\n` +
+                        `用户: ${data.user.email}\n` +
+                        `会话ID: ${currentSessionId || '未设置'}`, 
+                        'success'
+                    );
+                } else {
+                    showResult('setupResult', `状态检查失败: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showResult('setupResult', `状态检查错误: ${error.message}`, 'error');
+            }
+        }
+
+        // 模拟聊天流程
+        async function simulateChat() {
+            if (!currentToken || !currentSessionId) {
+                alert('请先初始化测试环境');
+                return;
+            }
+
+            const userMessage = document.getElementById('userMessage').value.trim();
+            if (!userMessage) {
+                alert('请输入用户消息');
+                return;
+            }
+
+            // 清空之前的流程
+            document.getElementById('messageFlow').innerHTML = '';
+
+            try {
+                // 步骤1: 存储用户消息
+                addFlowStep('步骤1: 存储用户消息', '正在将用户消息存储到数据库...', 'user');
+                
+                const { response: userMsgResponse, data: userMsgData } = await apiCall('/api/messages/create', 'POST', {
+                    session_id: currentSessionId,
+                    role: 'user',
+                    content: userMessage,
+                    workflow_stage: { stage: 'user_input', step: 1 }
+                });
+
+                if (userMsgResponse.ok && userMsgData.success) {
+                    addFlowStep('✓ 用户消息存储成功', `消息ID: ${userMsgData.data.id}`, 'storage');
+                } else {
+                    throw new Error(`用户消息存储失败: ${userMsgData.message}`);
+                }
+
+                // 步骤2: 调用AI流式API
+                addFlowStep('步骤2: 调用AI流式API', '正在调用 /api/chat/stream 获取AI回复...', 'assistant');
+
+                const response = await fetch('/api/chat/stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentToken}`
+                    },
+                    body: JSON.stringify({
+                        session_id: currentSessionId,
+                        query: userMessage
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`AI API调用失败: ${response.status} ${response.statusText}`);
+                }
+
+                // 步骤3: 处理流式响应
+                addFlowStep('步骤3: 处理流式响应', '正在接收AI流式回复...', 'assistant');
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let fullContent = '';
+                let chunkCount = 0;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const jsonData = line.substring(6).trim();
+                            
+                            if (jsonData) {
+                                try {
+                                    const data = JSON.parse(jsonData);
+                                    
+                                    if (data.content) {
+                                        fullContent += data.content;
+                                        chunkCount++;
+                                        
+                                        // 更新流式接收状态
+                                        const lastStep = document.querySelector('#messageFlow .flow-step:last-child .step-content');
+                                        if (lastStep) {
+                                            lastStep.textContent = `已接收 ${chunkCount} 个数据块，当前内容长度: ${fullContent.length}`;
+                                        }
+                                    }
+
+                                    if (data.finished) {
+                                        addFlowStep('✓ AI回复接收完成', `完整回复长度: ${fullContent.length} 字符`, 'assistant');
+                                        
+                                        // 步骤4: 存储AI回复 (这应该由API自动完成，但我们验证一下)
+                                        addFlowStep('步骤4: 验证AI回复存储', '检查AI回复是否已自动存储到数据库...', 'storage');
+                                        
+                                        // 等待一下确保数据库写入完成
+                                        setTimeout(async () => {
+                                            await verifyStorage();
+                                        }, 1000);
+                                        
+                                        return;
+                                    }
+                                } catch (parseError) {
+                                    console.warn('解析SSE数据失败:', jsonData, parseError);
+                                }
+                            }
+                        }
+                    }
+                }
+
+            } catch (error) {
+                addFlowStep('❌ 流程失败', `错误: ${error.message}`, 'error');
+            }
+        }
+
+        // 清空模拟
+        function clearSimulation() {
+            document.getElementById('messageFlow').innerHTML = `
+                <div class="flow-step info">
+                    <div class="step-title">等待开始聊天流程...</div>
+                    <div class="step-content">点击"模拟完整聊天流程"开始测试</div>
+                </div>
+            `;
+        }
+
+        // 验证消息存储
+        async function verifyStorage() {
+            if (!currentToken || !currentSessionId) {
+                showResult('verificationResult', '请先初始化测试环境', 'error');
+                return;
+            }
+
+            try {
+                const { response, data } = await apiCall(`/api/messages?session_id=${currentSessionId}`);
+
+                if (response.ok && data.success) {
+                    const messages = data.data.history;
+                    
+                    showResult('verificationResult', 
+                        `消息存储验证成功！\n` +
+                        `会话中共有 ${messages.length} 条消息\n` +
+                        `用户消息: ${messages.filter(m => m.role === 'user').length} 条\n` +
+                        `AI回复: ${messages.filter(m => m.role === 'assistant').length} 条`, 
+                        'success'
+                    );
+
+                    // 更新消息列表显示
+                    loadMessageHistory();
+
+                    // 在流程中添加验证结果
+                    addFlowStep('✓ 消息存储验证完成', `数据库中共有 ${messages.length} 条消息`, 'storage');
+
+                } else {
+                    showResult('verificationResult', `验证失败: ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showResult('verificationResult', `验证错误: ${error.message}`, 'error');
+            }
+        }
+
+        // 加载消息历史
+        async function loadMessageHistory() {
+            if (!currentToken || !currentSessionId) {
+                return;
+            }
+
+            try {
+                const { response, data } = await apiCall(`/api/messages?session_id=${currentSessionId}`);
+
+                if (response.ok && data.success) {
+                    const container = document.getElementById('storedMessages');
+                    container.innerHTML = '';
+
+                    if (data.data.history.length === 0) {
+                        container.innerHTML = '<div class="message-item info">该会话暂无消息</div>';
+                        return;
+                    }
+
+                    data.data.history.forEach((msg, index) => {
+                        const messageDiv = document.createElement('div');
+                        messageDiv.className = `message-item ${msg.role}`;
+                        
+                        const timestamp = new Date(msg.created_at).toLocaleString();
+                        let workflowInfo = '';
+                        
+                        if (msg.workflow_stage) {
+                            try {
+                                const workflow = JSON.parse(msg.workflow_stage);
+                                workflowInfo = ` | 工作流: ${JSON.stringify(workflow)}`;
+                            } catch (e) {
+                                workflowInfo = ` | 工作流: ${msg.workflow_stage}`;
+                            }
+                        }
+
+                        messageDiv.innerHTML = `
+                            <div class="message-meta">#${index + 1} | ${timestamp} | ${msg.role}${workflowInfo}</div>
+                            <div>${msg.content}</div>
+                        `;
+                        
+                        container.appendChild(messageDiv);
+                    });
+                }
+            } catch (error) {
+                console.error('加载消息历史失败:', error);
+            }
+        }
+
+        // 页面加载时的提示
+        window.addEventListener('load', function() {
+            showResult('setupResult', '请点击"初始化测试环境"开始测试', 'info');
+        });
+    </script>
+</body>
+</html>

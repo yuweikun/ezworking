@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { createServerSupabaseClient } from '../../../../lib/supabase';
 import { validateLoginRequest, validateRequestBody } from '../../../../lib/utils/validation';
 import { createSuccessResponse, createErrorResponse, createValidationErrorResponse, handleApiError, validateMethod } from '../../../../lib/utils/response';
-import type { LoginRequest } from '../../../../lib/types';
+import type { LoginRequest } from '../../../../types/auth';
 
 export async function POST(request: NextRequest) {
   try {

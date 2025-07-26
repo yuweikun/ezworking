@@ -101,7 +101,11 @@ export const ERROR_MESSAGES = {
   FORBIDDEN: '权限不足，无法执行此操作',
   NOT_FOUND: '请求的资源不存在',
   VALIDATION_ERROR: '输入数据验证失败',
-  SERVER_ERROR: '服务器内部错误，请稍后重试'
+  SERVER_ERROR: '服务器内部错误，请稍后重试',
+  INVALID_CREDENTIALS: '用户名或密码错误',
+  INVALID_EMAIL: '邮箱格式无效',
+  EMAIL_EXISTS: '该邮箱已被注册',
+  UNKNOWN_ERROR: '未知错误，请稍后重试'
 } as const;
 
 // 会话错误消息

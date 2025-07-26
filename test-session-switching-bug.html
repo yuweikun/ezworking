@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>会话切换Bug测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        
+        .bug-description {
+            background-color: #fff5f5;
+            border: 1px solid #fed7d7;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .bug-title {
+            color: #c53030;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .fix-description {
+            background-color: #f0fff4;
+            border: 1px solid #c6f6d5;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .fix-title {
+            color: #38a169;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .test-scenario {
+            background-color: #e7f3ff;
+            border: 1px solid #bee3f8;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .scenario-title {
+            color: #2b6cb0;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .step {
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-left: 4px solid #007bff;
+            border-radius: 4px;
+        }
+        
+        .step-number {
+            font-weight: bold;
+            color: #007bff;
+        }
+        
+        .code-block {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        
+        .problem {
+            color: #dc3545;
+            font-weight: bold;
+        }
+        
+        .solution {
+            color: #28a745;
+            font-weight: bold;
+        }
+        
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+            margin: 20px 0;
+        }
+        
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 15px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background-color: #e0e0e0;
+        }
+        
+        .timeline-item {
+            position: relative;
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -22px;
+            top: 20px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #007bff;
+            border: 2px solid white;
+        }
+        
+        .timeline-item.problem::before {
+            background-color: #dc3545;
+        }
+        
+        .timeline-item.solution::before {
+            background-color: #28a745;
+        }
+        
+        .timeline-time {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .timeline-content {
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🐛 会话切换Bug修复</h1>
+            <p>解决消息存储到错误会话的严重问题</p>
+        </div>
+
+        <!-- Bug描述 -->
+        <div class="bug-description">
+            <div class="bug-title">🚨 严重Bug描述</div>
+            <p>当用户从对话A切换到对话B后，继续发送消息时，消息被错误地保存到了对话A中，而不是当前活跃的对话B。</p>
+            
+            <h4>问题场景：</h4>
+            <ol>
+                <li>用户在对话A中发送消息</li>
+                <li>AI开始回复（异步流式响应）</li>
+                <li>用户在AI回复过程中切换到对话B</li>
+                <li>AI回复完成，触发消息存储</li>
+                <li><span class="problem">消息被错误存储到对话A而不是对话B</span></li>
+            </ol>
+        </div>
+
+        <!-- 根本原因 -->
+        <div class="test-scenario">
+            <div class="scenario-title">🔍 根本原因分析</div>
+            
+            <h4>问题代码：</h4>
+            <div class="code-block">
+const requestHandler = async ({ message }, { onUpdate, onSuccess, onError }) => {
+  try {
+    // <span class="highlight">❌ 在函数开始时获取activeConversationId</span>
+    if (!activeConversationId) {
+      onError(new Error("请先创建或选择一个会话"));
+      return;
+    }
+
+    // ... AI流式回复过程 ...
+
+    if (data.finished) {
+      // <span class="highlight">❌ 这里使用的activeConversationId可能已经过时</span>
+      await storeBatchMessages(activeConversationId, [userMessage, aiMessage]);
+    }
+  }
+};
+            </div>
+            
+            <h4>问题分析：</h4>
+            <ul>
+                <li><span class="problem">闭包问题</span>：`activeConversationId` 在异步函数开始时被捕获</li>
+                <li><span class="problem">状态过时</span>：在AI回复过程中用户切换会话，但函数内的值没有更新</li>
+                <li><span class="problem">时序问题</span>：存储操作发生在会话切换之后，但使用的是旧的会话ID</li>
+            </ul>
+        </div>
+
+        <!-- 修复方案 -->
+        <div class="fix-description">
+            <div class="fix-title">✅ 修复方案</div>
+            
+            <h4>方案1：在函数开始时保存会话ID</h4>
+            <div class="code-block">
+const requestHandler = async ({ message }, { onUpdate, onSuccess, onError }) => {
+  // <span class="highlight">✅ 在函数开始时保存当前会话ID</span>
+  const currentSessionId = activeConversationId;
+  
+  try {
+    if (!currentSessionId) {
+      onError(new Error("请先创建或选择一个会话"));
+      return;
+    }
+
+    // ... AI流式回复过程 ...
+
+    if (data.finished) {
+      // <span class="highlight">✅ 使用保存的会话ID，确保一致性</span>
+      await storeBatchMessages(currentSessionId, [userMessage, aiMessage]);
+    }
+  }
+};
+            </div>
+            
+            <h4>方案2：通过参数传递会话ID（更好的方案）</h4>
+            <div class="code-block">
+// 在onSubmit中保存会话ID
+const onSubmit = (val) => {
+  const sessionIdForRequest = activeConversationId;
+  
+  onRequest({
+    stream: true,
+    message: { 
+      role: "user", 
+      content: val, 
+      <span class="highlight">sessionId: sessionIdForRequest</span> // ✅ 明确传递会话ID
+    }
+  });
+};
+
+// 在requestHandler中使用传递的会话ID
+const requestHandler = async ({ message }, { onUpdate, onSuccess, onError }) => {
+  // <span class="highlight">✅ 优先使用传递的会话ID</span>
+  const currentSessionId = message.sessionId || activeConversationId;
+  
+  // ... 其余逻辑保持不变 ...
+};
+            </div>
+        </div>
+
+        <!-- 时间线演示 -->
+        <div class="container">
+            <h3>🕐 Bug发生时间线</h3>
+            
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-time">T0: 用户操作</div>
+                    <div class="timeline-content">用户在对话A中发送消息"你好"</div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-time">T1: 函数调用</div>
+                    <div class="timeline-content">requestHandler被调用，activeConversationId = "session-A"</div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-time">T2: AI开始回复</div>
+                    <div class="timeline-content">AI开始流式回复，用户看到"正在思考中..."</div>
+                </div>
+                
+                <div class="timeline-item problem">
+                    <div class="timeline-time">T3: 用户切换会话</div>
+                    <div class="timeline-content">用户点击切换到对话B，activeConversationId = "session-B"</div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-time">T4: AI回复完成</div>
+                    <div class="timeline-content">AI回复"你好！我是AI助手..."</div>
+                </div>
+                
+                <div class="timeline-item problem">
+                    <div class="timeline-time">T5: 错误存储</div>
+                    <div class="timeline-content">
+                        <span class="problem">Bug发生</span>：消息被存储到session-A，但用户期望存储到session-B
+                    </div>
+                </div>
+            </div>
+            
+            <h3>🔧 修复后的时间线</h3>
+            
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-time">T0: 用户操作</div>
+                    <div class="timeline-content">用户在对话A中发送消息"你好"</div>
+                </div>
+                
+                <div class="timeline-item solution">
+                    <div class="timeline-time">T1: 函数调用</div>
+                    <div class="timeline-content">
+                        requestHandler被调用，<span class="solution">currentSessionId = "session-A"</span>（保存快照）
+                    </div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-time">T2: AI开始回复</div>
+                    <div class="timeline-content">AI开始流式回复，用户看到"正在思考中..."</div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-time">T3: 用户切换会话</div>
+                    <div class="timeline-content">用户点击切换到对话B，activeConversationId = "session-B"</div>
+                </div>
+                
+                <div class="timeline-item">
+                    <div class="timeline-time">T4: AI回复完成</div>
+                    <div class="timeline-content">AI回复"你好！我是AI助手..."</div>
+                </div>
+                
+                <div class="timeline-item solution">
+                    <div class="timeline-time">T5: 正确存储</div>
+                    <div class="timeline-content">
+                        <span class="solution">修复成功</span>：消息被正确存储到session-A（原始发送消息的会话）
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 测试验证 -->
+        <div class="test-scenario">
+            <div class="scenario-title">🧪 测试验证步骤</div>
+            
+            <div class="step">
+                <span class="step-number">步骤1：</span>
+                创建两个测试会话：对话A和对话B
+            </div>
+            
+            <div class="step">
+                <span class="step-number">步骤2：</span>
+                在对话A中发送消息"测试消息A"
+            </div>
+            
+            <div class="step">
+                <span class="step-number">步骤3：</span>
+                在AI开始回复时，立即切换到对话B
+            </div>
+            
+            <div class="step">
+                <span class="step-number">步骤4：</span>
+                等待AI回复完成，检查消息存储位置
+            </div>
+            
+            <div class="step">
+                <span class="step-number">步骤5：</span>
+                验证消息是否正确存储在对话A中，而不是对话B
+            </div>
+            
+            <div class="step">
+                <span class="step-number">步骤6：</span>
+                在对话B中发送新消息，验证是否正确存储在对话B中
+            </div>
+        </div>
+
+        <!-- 预防措施 -->
+        <div class="fix-description">
+            <div class="fix-title">🛡️ 预防措施</div>
+            
+            <h4>代码审查要点：</h4>
+            <ul>
+                <li><span class="solution">避免在异步函数中直接使用全局状态</span></li>
+                <li><span class="solution">在函数开始时保存状态快照</span></li>
+                <li><span class="solution">通过参数明确传递必要的上下文</span></li>
+                <li><span class="solution">添加单元测试覆盖异步状态变化场景</span></li>
+            </ul>
+            
+            <h4>最佳实践：</h4>
+            <ul>
+                <li>使用 <code>useCallback</code> 时要注意依赖数组</li>
+                <li>异步操作中避免依赖可变的外部状态</li>
+                <li>关键操作添加状态一致性检查</li>
+                <li>实现操作取消机制，避免过时操作执行</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // 模拟时间线动画
+        function animateTimeline() {
+            const timelineItems = document.querySelectorAll('.timeline-item');
+            
+            timelineItems.forEach((item, index) => {
+                setTimeout(() => {
+                    item.style.opacity = '0.3';
+                    setTimeout(() => {
+                        item.style.opacity = '1';
+                        item.style.transform = 'scale(1.02)';
+                        setTimeout(() => {
+                            item.style.transform = 'scale(1)';
+                        }, 200);
+                    }, 100);
+                }, index * 500);
+            });
+        }
+
+        // 页面加载后开始动画
+        window.addEventListener('load', () => {
+            setTimeout(animateTimeline, 1000);
+        });
+    </script>
+</body>
+</html>

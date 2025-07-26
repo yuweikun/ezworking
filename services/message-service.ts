@@ -112,7 +112,7 @@ export class MessageService {
         session_id: sessionId,
         role,
         content,
-        work_stage: workStage
+        workflow_stage: workStage
       };
 
       await httpClient.post(API_ENDPOINTS.MESSAGES, messageData);

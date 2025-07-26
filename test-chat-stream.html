@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>聊天API测试</title>
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background-color: #f5f5f5;
+      }
+
+      .container {
+        background: white;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 30px;
+        color: #333;
+      }
+
+      .auth-section,
+      .chat-section {
+        margin-bottom: 30px;
+        padding: 20px;
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+      }
+
+      .form-group {
+        margin-bottom: 15px;
+      }
+
+      label {
+        display: block;
+        margin-bottom: 5px;
+        font-weight: 500;
+        color: #555;
+      }
+
+      input,
+      textarea,
+      select {
+        width: 100%;
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 5px;
+        font-size: 14px;
+        box-sizing: border-box;
+      }
+
+      button {
+        background: #007bff;
+        color: white;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        font-size: 14px;
+        margin-right: 10px;
+      }
+
+      button:hover {
+        background: #0056b3;
+      }
+
+      button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+
+      .status {
+        padding: 10px;
+        border-radius: 5px;
+        margin: 10px 0;
+      }
+
+      .status.success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+      }
+
+      .status.error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+      }
+
+      .status.info {
+        background: #d1ecf1;
+        color: #0c5460;
+        border: 1px solid #bee5eb;
+      }
+
+      .chat-messages {
+        height: 400px;
+        overflow-y: auto;
+        border: 1px solid #ddd;
+        padding: 15px;
+        margin-bottom: 15px;
+        background: #fafafa;
+        border-radius: 5px;
+      }
+
+      .message {
+        margin-bottom: 15px;
+        padding: 10px;
+        border-radius: 8px;
+      }
+
+      .message.user {
+        background: #007bff;
+        color: white;
+        margin-left: 20%;
+      }
+
+      .message.ai {
+        background: #e9ecef;
+        color: #333;
+        margin-right: 20%;
+      }
+
+      .message-role {
+        font-weight: bold;
+        margin-bottom: 5px;
+        font-size: 12px;
+        opacity: 0.8;
+      }
+
+      .message-content {
+        line-height: 1.4;
+        white-space: pre-wrap;
+      }
+
+      .streaming-indicator {
+        display: none;
+        color: #007bff;
+        font-style: italic;
+        margin: 10px 0;
+      }
+
+      .stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 10px;
+        margin-top: 15px;
+      }
+
+      .stat-item {
+        background: #f8f9fa;
+        padding: 10px;
+        border-radius: 5px;
+        text-align: center;
+      }
+
+      .stat-value {
+        font-size: 18px;
+        font-weight: bold;
+        color: #007bff;
+      }
+
+      .stat-label {
+        font-size: 12px;
+        color: #666;
+        margin-top: 5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🤖 聊天API测试工具</h1>
+        <p>测试普通聊天API和流式聊天API功能</p>
+      </div>
+      <!-- 认证部分 -->
+      <div class="auth-section">
+        <h3>🔐 用户认证</h3>
+        <div class="form-group">
+          <label for="email">邮箱:</label>
+          <input type="email" id="email" value="test@example.com" />
+        </div>
+        <div class="form-group">
+          <label for="password">密码:</label>
+          <input type="password" id="password" value="password123" />
+        </div>
+        <button type="button" onclick="login()">登录</button>
+        <button type="button" onclick="createSession()">创建会话</button>
+        <div id="authStatus"></div>
+      </div>
+      <!-- 聊天部分 -->
+      <div class="chat-section">
+        <h3>💬 聊天测试</h3>
+        <div class="form-group">
+          <label for="apiType">API类型:</label>
+          <select id="apiType">
+            <option value="stream">流式聊天API (/api/chat/stream)</option>
+            <option value="normal">普通聊天API (/api/chat)</option>
+          </select>
+        </div>
+        <div class="chat-messages" id="chatMessages"></div>
+        <div class="streaming-indicator" id="streamingIndicator">
+          🔄 AI正在思考中...
+        </div>
+        <div class="form-group">
+          <label for="userQuery">输入消息:</label>
+          <textarea
+            id="userQuery"
+            rows="3"
+            placeholder="输入你想问的问题..."
+          ></textarea>
+        </div>
+        <button type="button" onclick="sendMessage()" id="sendButton">
+          发送消息
+        </button>
+        <button type="button" onclick="clearChat()">清空聊天</button>
+        <div id="chatStatus"></div>
+        <!-- 统计信息 -->
+        <div class="stats">
+          <div class="stat-item">
+            <div class="stat-value" id="messageCount">0</div>
+            <div class="stat-label">消息数量</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="responseTime">0ms</div>
+            <div class="stat-label">响应时间</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="chunkCount">0</div>
+            <div class="stat-label">数据块数</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-value" id="charCount">0</div>
+            <div class="stat-label">字符数</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let authToken = null;
+      let sessionId = null;
+      let messageCount = 0;
+
+      // 显示状态消息
+      function showStatus(elementId, message, type = "info") {
+        const element = document.getElementById(elementId);
+        element.innerHTML = `<div class="status ${type}">${message}</div>`;
+      }
+
+      // 用户登录
+      async function login() {
+        const email = document.getElementById("email").value;
+        const password = document.getElementById("password").value;
+
+        if (!email || !password) {
+          showStatus("authStatus", "请输入邮箱和密码", "error");
+          return;
+        }
+
+        try {
+          showStatus("authStatus", "正在登录...", "info");
+
+          const response = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ email, password }),
+          });
+
+          const data = await response.json();
+
+          if (data.success && data.data.token) {
+            authToken = data.data.token;
+            showStatus(
+              "authStatus",
+              `✅ 登录成功！用户: ${data.data.user.email}`,
+              "success"
+            );
+          } else {
+            showStatus("authStatus", `❌ 登录失败: ${data.message}`, "error");
+          }
+        } catch (error) {
+          showStatus(
+            "authStatus",
+            `❌ 登录请求失败: ${error.message}`,
+            "error"
+          );
+        }
+      }
+
+      // 创建会话
+      async function createSession() {
+        if (!authToken) {
+          showStatus("authStatus", "请先登录", "error");
+          return;
+        }
+
+        try {
+          showStatus("authStatus", "正在创建会话...", "info");
+
+          const response = await fetch("/api/sessions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${authToken}`,
+            },
+            body: JSON.stringify({
+              title: `聊天测试会话 - ${new Date().toLocaleString()}`,
+            }),
+          });
+
+          const data = await response.json();
+
+          if (data.success && data.data.id) {
+            sessionId = data.data.id;
+            showStatus(
+              "authStatus",
+              `✅ 会话创建成功！ID: ${sessionId.substring(0, 8)}...`,
+              "success"
+            );
+          } else {
+            showStatus(
+              "authStatus",
+              `❌ 会话创建失败: ${data.message}`,
+              "error"
+            );
+          }
+        } catch (error) {
+          showStatus(
+            "authStatus",
+            `❌ 会话创建请求失败: ${error.message}`,
+            "error"
+          );
+        }
+      }
+
+      // 添加消息到聊天界面
+      function addMessage(role, content) {
+        const messagesContainer = document.getElementById("chatMessages");
+        const messageDiv = document.createElement("div");
+        messageDiv.className = `message ${role}`;
+
+        const roleSpan = document.createElement("div");
+        roleSpan.className = "message-role";
+        roleSpan.textContent = role === "user" ? "👤 用户" : "🤖 AI助手";
+
+        const contentDiv = document.createElement("div");
+        contentDiv.className = "message-content";
+        contentDiv.textContent = content;
+
+        messageDiv.appendChild(roleSpan);
+        messageDiv.appendChild(contentDiv);
+        messagesContainer.appendChild(messageDiv);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+        messageCount++;
+        document.getElementById("messageCount").textContent = messageCount;
+      }
+
+      // 更新AI消息内容（用于流式响应）
+      function updateLastAIMessage(content) {
+        const messagesContainer = document.getElementById("chatMessages");
+        const messages = messagesContainer.querySelectorAll(".message.ai");
+        if (messages.length > 0) {
+          const lastMessage = messages[messages.length - 1];
+          const contentDiv = lastMessage.querySelector(".message-content");
+          contentDiv.textContent = content;
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+      }
+
+      // 发送消息
+      async function sendMessage() {
+        const query = document.getElementById("userQuery").value.trim();
+        const apiType = document.getElementById("apiType").value;
+
+        if (!query) {
+          showStatus("chatStatus", "请输入消息内容", "error");
+          return;
+        }
+
+        if (!authToken || !sessionId) {
+          showStatus("chatStatus", "请先登录并创建会话", "error");
+          return;
+        }
+
+        // 禁用发送按钮
+        const sendButton = document.getElementById("sendButton");
+        sendButton.disabled = true;
+        sendButton.textContent = "发送中...";
+
+        // 添加用户消息
+        addMessage("user", query);
+        document.getElementById("userQuery").value = "";
+
+        const startTime = Date.now();
+
+        try {
+          if (apiType === "stream") {
+            await sendStreamMessage(query, startTime);
+          } else {
+            await sendNormalMessage(query, startTime);
+          }
+        } catch (error) {
+          showStatus("chatStatus", `❌ 发送失败: ${error.message}`, "error");
+        } finally {
+          // 恢复发送按钮
+          sendButton.disabled = false;
+          sendButton.textContent = "发送消息";
+          document.getElementById("streamingIndicator").style.display = "none";
+        }
+      }
+
+      // 发送普通消息
+      async function sendNormalMessage(query, startTime) {
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({
+            session_id: sessionId,
+            query: query,
+          }),
+        });
+
+        const data = await response.json();
+        const endTime = Date.now();
+        const responseTime = endTime - startTime;
+
+        if (data.success) {
+          addMessage("ai", data.data.response);
+          showStatus("chatStatus", "✅ 消息发送成功", "success");
+
+          // 更新统计
+          document.getElementById(
+            "responseTime"
+          ).textContent = `${responseTime}ms`;
+          document.getElementById("charCount").textContent =
+            data.data.response.length;
+          document.getElementById("chunkCount").textContent = "1";
+        } else {
+          showStatus("chatStatus", `❌ 发送失败: ${data.message}`, "error");
+        }
+      }
+
+      // 发送流式消息
+      async function sendStreamMessage(query, startTime) {
+        document.getElementById("streamingIndicator").style.display = "block";
+
+        const response = await fetch("/api/chat/stream", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${authToken}`,
+          },
+          body: JSON.stringify({
+            session_id: sessionId,
+            query: query,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        // 添加空的AI消息容器
+        addMessage("ai", "");
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullContent = "";
+        let chunkCount = 0;
+
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const lines = chunk.split("\n");
+
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const jsonData = line.substring(6).trim();
+
+                if (jsonData) {
+                  try {
+                    const data = JSON.parse(jsonData);
+                    chunkCount++;
+
+                    if (data.content) {
+                      fullContent += data.content;
+                      updateLastAIMessage(fullContent);
+                    }
+
+                    if (data.finished) {
+                      const endTime = Date.now();
+                      const responseTime = endTime - startTime;
+
+                      showStatus("chatStatus", "✅ 流式响应完成", "success");
+
+                      // 更新统计
+                      document.getElementById(
+                        "responseTime"
+                      ).textContent = `${responseTime}ms`;
+                      document.getElementById("charCount").textContent =
+                        fullContent.length;
+                      document.getElementById("chunkCount").textContent =
+                        chunkCount;
+
+                      return;
+                    }
+
+                    if (data.error) {
+                      showStatus("chatStatus", "❌ 流式响应出现错误", "error");
+                      return;
+                    }
+                  } catch (parseError) {
+                    console.warn("解析chunk数据失败:", jsonData);
+                  }
+                }
+              }
+            }
+          }
+        } finally {
+          reader.releaseLock();
+        }
+      }
+
+      // 清空聊天
+      function clearChat() {
+        document.getElementById("chatMessages").innerHTML = "";
+        messageCount = 0;
+        document.getElementById("messageCount").textContent = "0";
+        document.getElementById("responseTime").textContent = "0ms";
+        document.getElementById("chunkCount").textContent = "0";
+        document.getElementById("charCount").textContent = "0";
+        showStatus("chatStatus", "聊天记录已清空", "info");
+      }
+
+      // 回车发送消息
+      document
+        .getElementById("userQuery")
+        .addEventListener("keydown", function (event) {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            sendMessage();
+          }
+        });
+
+      // 页面加载完成后的初始化
+      document.addEventListener("DOMContentLoaded", function () {
+        showStatus("authStatus", "请先登录以开始测试", "info");
+        showStatus("chatStatus", "准备就绪，请先完成认证", "info");
+      });
+    </script>
+  </body>
+</html>

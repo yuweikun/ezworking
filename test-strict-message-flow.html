@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>严格消息流程测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        
+        .flow-description {
+            background-color: #e7f3ff;
+            border: 1px solid #bee3f8;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .flow-title {
+            color: #2b6cb0;
+            font-weight: bold;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        
+        .step-flow {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            margin: 20px 0;
+        }
+        
+        .step {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            border-radius: 8px;
+            position: relative;
+        }
+        
+        .step.user {
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196f3;
+        }
+        
+        .step.storage {
+            background-color: #fff3e0;
+            border-left: 4px solid #ff9800;
+        }
+        
+        .step.ai {
+            background-color: #f3e5f5;
+            border-left: 4px solid #9c27b0;
+        }
+        
+        .step.complete {
+            background-color: #e8f5e8;
+            border-left: 4px solid #4caf50;
+        }
+        
+        .step-number {
+            background-color: #007bff;
+            color: white;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+        
+        .step.storage .step-number {
+            background-color: #ff9800;
+        }
+        
+        .step.ai .step-number {
+            background-color: #9c27b0;
+        }
+        
+        .step.complete .step-number {
+            background-color: #4caf50;
+        }
+        
+        .step-content {
+            flex: 1;
+        }
+        
+        .step-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .step-description {
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .arrow {
+            text-align: center;
+            color: #007bff;
+            font-size: 20px;
+            margin: 5px 0;
+        }
+        
+        .benefits {
+            background-color: #f0fff4;
+            border: 1px solid #c6f6d5;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        
+        .benefits h3 {
+            color: #38a169;
+            margin-top: 0;
+        }
+        
+        .benefit-item {
+            margin-bottom: 10px;
+            padding-left: 20px;
+            position: relative;
+        }
+        
+        .benefit-item::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #38a169;
+            font-weight: bold;
+        }
+        
+        .comparison {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .comparison-item {
+            padding: 15px;
+            border-radius: 8px;
+        }
+        
+        .old-flow {
+            background-color: #fff5f5;
+            border: 1px solid #fed7d7;
+        }
+        
+        .new-flow {
+            background-color: #f0fff4;
+            border: 1px solid #c6f6d5;
+        }
+        
+        .comparison-title {
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .old-flow .comparison-title {
+            color: #c53030;
+        }
+        
+        .new-flow .comparison-title {
+            color: #38a169;
+        }
+        
+        .code-example {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            overflow-x: auto;
+            margin: 15px 0;
+        }
+        
+        .highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
+        }
+        
+        .timeline {
+            position: relative;
+            padding-left: 30px;
+            margin: 20px 0;
+        }
+        
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 15px;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background-color: #e0e0e0;
+        }
+        
+        .timeline-item {
+            position: relative;
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -22px;
+            top: 20px;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #007bff;
+            border: 2px solid white;
+        }
+        
+        .timeline-item.storage::before {
+            background-color: #ff9800;
+        }
+        
+        .timeline-item.ai::before {
+            background-color: #9c27b0;
+        }
+        
+        .timeline-item.complete::before {
+            background-color: #4caf50;
+        }
+        
+        .timeline-time {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        
+        .timeline-content {
+            font-size: 14px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .status-waiting {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-processing {
+            background-color: #cce5ff;
+            color: #0066cc;
+        }
+        
+        .status-complete {
+            background-color: #d4edda;
+            color: #155724;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔄 严格消息流程设计</h1>
+            <p>确保每个步骤完成后才进行下一步的聊天体验</p>
+        </div>
+
+        <!-- 流程描述 -->
+        <div class="flow-description">
+            <div class="flow-title">📋 新的严格流程</div>
+            <p>为了确保数据一致性和用户体验的可预测性，我们实现了一个严格的步骤化流程，每个步骤必须完成后才能进行下一步。</p>
+        </div>
+
+        <!-- 详细步骤流程 -->
+        <div class="container">
+            <h3>🔢 详细步骤流程</h3>
+            
+            <div class="step-flow">
+                <div class="step user">
+                    <div class="step-number">1</div>
+                    <div class="step-content">
+                        <div class="step-title">用户发送消息</div>
+                        <div class="step-description">用户输入消息并点击发送，消息立即渲染在聊天界面中</div>
+                    </div>
+                </div>
+                
+                <div class="arrow">↓</div>
+                
+                <div class="step storage">
+                    <div class="step-number">2</div>
+                    <div class="step-content">
+                        <div class="step-title">上传用户消息到数据库</div>
+                        <div class="step-description">显示"💾 正在保存您的消息..."，等待数据库存储完成</div>
+                    </div>
+                </div>
+                
+                <div class="arrow">↓</div>
+                
+                <div class="step ai">
+                    <div class="step-number">3</div>
+                    <div class="step-content">
+                        <div class="step-title">AI开始响应</div>
+                        <div class="step-description">用户消息保存成功后，AI开始生成回复，显示"正在思考中..."</div>
+                    </div>
+                </div>
+                
+                <div class="arrow">↓</div>
+                
+                <div class="step ai">
+                    <div class="step-number">4</div>
+                    <div class="step-content">
+                        <div class="step-title">实时渲染AI回复</div>
+                        <div class="step-description">AI流式回复过程中，实时更新AI消息气泡内容</div>
+                    </div>
+                </div>
+                
+                <div class="arrow">↓</div>
+                
+                <div class="step storage">
+                    <div class="step-number">5</div>
+                    <div class="step-content">
+                        <div class="step-title">上传AI消息到数据库</div>
+                        <div class="step-description">AI回复完成后，显示"💾 正在保存AI回复..."，等待数据库存储完成</div>
+                    </div>
+                </div>
+                
+                <div class="arrow">↓</div>
+                
+                <div class="step complete">
+                    <div class="step-number">6</div>
+                    <div class="step-content">
+                        <div class="step-title">用户可以继续聊天</div>
+                        <div class="step-description">AI消息保存成功后，移除存储提示，用户可以发送下一条消息</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 时间线演示 -->
+        <div class="container">
+            <h3>⏱️ 交互时间线</h3>
+            
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-time">T0: 用户操作</div>
+                    <div class="timeline-content">
+                        用户输入"你好"并点击发送
+                        <span class="status-indicator status-complete">立即完成</span>
+                    </div>
+                </div>
+                
+                <div class="timeline-item storage">
+                    <div class="timeline-time">T1: 存储用户消息</div>
+                    <div class="timeline-content">
+                        显示"💾 正在保存您的消息..."，调用 /api/messages/create
+                        <span class="status-indicator status-processing">等待完成</span>
+                    </div>
+                </div>
+                
+                <div class="timeline-item ai">
+                    <div class="timeline-time">T2: AI开始响应</div>
+                    <div class="timeline-content">
+                        用户消息保存成功，显示"正在思考中..."，调用 /api/chat/stream
+                        <span class="status-indicator status-processing">开始处理</span>
+                    </div>
+                </div>
+                
+                <div class="timeline-item ai">
+                    <div class="timeline-time">T3-T5: AI流式回复</div>
+                    <div class="timeline-content">
+                        AI实时生成回复内容，用户看到逐字显示的回复
+                        <span class="status-indicator status-processing">实时更新</span>
+                    </div>
+                </div>
+                
+                <div class="timeline-item storage">
+                    <div class="timeline-time">T6: 存储AI消息</div>
+                    <div class="timeline-content">
+                        AI回复完成，显示"💾 正在保存AI回复..."，调用 /api/messages/create
+                        <span class="status-indicator status-processing">等待完成</span>
+                    </div>
+                </div>
+                
+                <div class="timeline-item complete">
+                    <div class="timeline-time">T7: 完成</div>
+                    <div class="timeline-content">
+                        AI消息保存成功，移除存储提示，用户可以继续聊天
+                        <span class="status-indicator status-complete">可以继续</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 关键实现代码 -->
+        <div class="container">
+            <h3>💻 关键实现代码</h3>
+            
+            <h4>1. 用户消息存储</h4>
+            <div class="code-example">
+// 步骤2: 上传用户消息到数据库
+setIsStoringMessages(true);
+onUpdate({ content: "💾 正在保存您的消息...", role: "assistant" });
+
+const userStorageSuccess = await storeMessage(
+  currentSessionId,
+  "user",
+  message.content,
+  { stage: "user_input", timestamp: Date.now() }
+);
+
+if (!userStorageSuccess) {
+  setIsStoringMessages(false);
+  onError(new Error("用户消息保存失败，请重试"));
+  return;
+}
+            </div>
+            
+            <h4>2. AI响应处理</h4>
+            <div class="code-example">
+// 步骤3: 用户消息保存成功，开始AI响应
+onUpdate({ content: "正在思考中...", role: "assistant" });
+
+// 调用AI流式API
+const response = await fetch("/api/chat/stream", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  },
+  body: JSON.stringify({
+    session_id: currentSessionId,
+    query: message.content,
+  }),
+});
+            </div>
+            
+            <h4>3. AI消息存储</h4>
+            <div class="code-example">
+if (data.finished) {
+  // 步骤6: AI回复完成，上传AI消息到数据库
+  onUpdate({ 
+    content: fullContent + "\n\n💾 正在保存AI回复...", 
+    role: "assistant" 
+  });
+
+  const aiStorageSuccess = await storeMessage(
+    currentSessionId,
+    "assistant",
+    fullContent,
+    finalWorkflowState || { stage: "ai_response", timestamp: Date.now() }
+  );
+
+  if (aiStorageSuccess) {
+    // 步骤7: AI消息保存成功，移除存储提示
+    onUpdate({ content: fullContent, role: "assistant" });
+    console.log("对话完成，用户可以继续聊天");
+  }
+
+  // 重置存储状态，允许用户继续聊天
+  setIsStoringMessages(false);
+}
+            </div>
+        </div>
+
+        <!-- 流程对比 -->
+        <div class="comparison">
+            <div class="comparison-item old-flow">
+                <div class="comparison-title">❌ 旧流程（批量存储）</div>
+                <ul>
+                    <li>用户发送消息 → 立即显示</li>
+                    <li>AI实时回复</li>
+                    <li>回复完成后批量存储用户+AI消息</li>
+                    <li>存储期间用户无法继续聊天</li>
+                    <li>存储失败影响整个对话</li>
+                </ul>
+            </div>
+            
+            <div class="comparison-item new-flow">
+                <div class="comparison-title">✅ 新流程（严格步骤）</div>
+                <ul>
+                    <li>用户发送消息 → 立即显示</li>
+                    <li>先存储用户消息 → 成功后AI才响应</li>
+                    <li>AI实时回复</li>
+                    <li>AI完成后立即存储AI消息</li>
+                    <li>存储完成后用户才能继续</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- 优势和特点 -->
+        <div class="benefits">
+            <h3>🎯 严格流程的优势</h3>
+            <div class="benefit-item">数据一致性：确保每条消息都被正确存储</div>
+            <div class="benefit-item">错误处理：任何步骤失败都会阻止后续操作</div>
+            <div class="benefit-item">用户反馈：每个步骤都有明确的状态提示</div>
+            <div class="benefit-item">防止冲突：用户必须等待当前对话完成才能继续</div>
+            <div class="benefit-item">可预测性：用户清楚知道系统正在做什么</div>
+            <div class="benefit-item">调试友好：每个步骤都可以独立监控和调试</div>
+        </div>
+
+        <!-- 注意事项 -->
+        <div class="flow-description">
+            <div class="flow-title">⚠️ 注意事项</div>
+            <ul>
+                <li><strong>网络延迟</strong>：每个存储步骤都需要网络请求，可能增加总体响应时间</li>
+                <li><strong>用户等待</strong>：用户需要等待存储完成才能继续，可能影响流畅性</li>
+                <li><strong>错误恢复</strong>：任何步骤失败都会中断整个流程，需要用户重试</li>
+                <li><strong>状态管理</strong>：需要精确管理 isStoringMessages 状态，避免状态不一致</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // 模拟步骤进度动画
+        function animateSteps() {
+            const steps = document.querySelectorAll('.step');
+            
+            steps.forEach((step, index) => {
+                setTimeout(() => {
+                    step.style.transform = 'scale(1.02)';
+                    step.style.boxShadow = '0 4px 12px rgba(0,123,255,0.3)';
+                    
+                    setTimeout(() => {
+                        step.style.transform = 'scale(1)';
+                        step.style.boxShadow = 'none';
+                    }, 300);
+                }, index * 800);
+            });
+        }
+
+        // 页面加载后开始动画
+        window.addEventListener('load', () => {
+            setTimeout(animateSteps, 1000);
+            setInterval(animateSteps, 8000); // 每8秒重复一次
+        });
+    </script>
+</body>
+</html>

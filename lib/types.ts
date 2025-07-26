@@ -13,7 +13,7 @@ export interface ChatMessage {
   session_id: string;
   role: 'user' | 'ai';
   content: string;
-  work_stage?: string;
+  workflow_stage?: string;
   timestamp: string;
 }
 
@@ -88,7 +88,7 @@ export interface MessageCreateRequest {
   session_id: string;
   role: 'user' | 'ai';
   content: string;
-  work_stage?: string;
+  workflow_stage?: string;
 }
 
 // 会话创建请求

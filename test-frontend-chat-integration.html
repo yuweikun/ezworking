@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>前端聊天集成测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #333;
+        }
+        
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+        }
+        
+        .test-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #2c3e50;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        
+        button:hover {
+            background-color: #0056b3;
+        }
+        
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+        
+        .result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        
+        .info {
+            background-color: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+        }
+        
+        .chat-messages {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 15px;
+            margin-bottom: 15px;
+            background-color: #fafafa;
+        }
+        
+        .message {
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            border-radius: 8px;
+        }
+        
+        .message.user {
+            background-color: #007bff;
+            color: white;
+            margin-left: 20%;
+        }
+        
+        .message.assistant {
+            background-color: #e9ecef;
+            color: #333;
+            margin-right: 20%;
+        }
+        
+        .message.loading {
+            background-color: #fff3cd;
+            color: #856404;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>前端聊天集成测试</h1>
+            <p>测试修改后的前端页面与聊天API的集成</p>
+        </div>
+
+        <!-- 认证状态 -->
+        <div class="test-section">
+            <div class="test-title">1. 认证状态检查</div>
+            <button onclick="checkAuthStatus()">检查认证状态</button>
+            <button onclick="loginTest()">测试登录</button>
+            <div id="authResult" class="result info" style="display: none;"></div>
+        </div>
+
+        <!-- 会话管理 -->
+        <div class="test-section">
+            <div class="test-title">2. 会话管理</div>
+            <div class="form-group">
+                <label>会话标题:</label>
+                <input type="text" id="sessionTitle" value="测试会话" placeholder="输入会话标题">
+            </div>
+            <button onclick="createSession()">创建会话</button>
+            <button onclick="listSessions()">获取会话列表</button>
+            <div class="form-group">
+                <label>选择会话:</label>
+                <select id="sessionSelect">
+                    <option value="">请选择会话</option>
+                </select>
+            </div>
+            <div id="sessionResult" class="result info" style="display: none;"></div>
+        </div>
+
+        <!-- 聊天测试 -->
+        <div class="test-section">
+            <div class="test-title">3. 聊天功能测试</div>
+            <div class="chat-messages" id="chatMessages">
+                <div class="message info">聊天消息将显示在这里...</div>
+            </div>
+            <div class="form-group">
+                <label>消息内容:</label>
+                <textarea id="messageInput" rows="3" placeholder="输入您的消息...">你好，请介绍一下你自己</textarea>
+            </div>
+            <button onclick="sendMessage()" id="sendBtn">发送消息</button>
+            <button onclick="clearChat()">清空聊天</button>
+            <div id="chatResult" class="result info" style="display: none;"></div>
+        </div>
+
+        <!-- 消息历史 -->
+        <div class="test-section">
+            <div class="test-title">4. 消息历史</div>
+            <button onclick="loadMessageHistory()">加载消息历史</button>
+            <div id="historyResult" class="result info" style="display: none;"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentToken = null;
+        let currentSessionId = null;
+
+        // 检查认证状态
+        async function checkAuthStatus() {
+            const resultDiv = document.getElementById('authResult');
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'result info';
+            resultDiv.textContent = '检查认证状态中...';
+
+            try {
+                const token = localStorage.getItem('auth_token');
+                if (!token) {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = '未找到认证token，请先登录';
+                    return;
+                }
+
+                currentToken = token;
+                
+                const response = await fetch('/api/auth/verify', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `认证成功！用户信息：\n${JSON.stringify(data.user, null, 2)}`;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `认证失败：${data.message || '未知错误'}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `认证检查失败：${error.message}`;
+            }
+        }
+
+        // 测试登录
+        async function loginTest() {
+            const resultDiv = document.getElementById('authResult');
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'result info';
+            resultDiv.textContent = '尝试登录测试用户...';
+
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        email: 'test@example.com',
+                        password: 'password123'
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    localStorage.setItem('auth_token', data.token);
+                    currentToken = data.token;
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `登录成功！\n${JSON.stringify(data, null, 2)}`;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `登录失败：${data.message || '未知错误'}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `登录请求失败：${error.message}`;
+            }
+        }
+
+        // 创建会话
+        async function createSession() {
+            const resultDiv = document.getElementById('sessionResult');
+            const title = document.getElementById('sessionTitle').value;
+            
+            if (!currentToken) {
+                resultDiv.style.display = 'block';
+                resultDiv.className = 'result error';
+                resultDiv.textContent = '请先登录';
+                return;
+            }
+
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'result info';
+            resultDiv.textContent = '创建会话中...';
+
+            try {
+                const response = await fetch('/api/sessions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentToken}`
+                    },
+                    body: JSON.stringify({
+                        title: title || '测试会话'
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    currentSessionId = data.data.id;
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `会话创建成功！\n${JSON.stringify(data.data, null, 2)}`;
+                    
+                    // 更新会话选择器
+                    await listSessions();
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `创建会话失败：${data.message || '未知错误'}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `创建会话请求失败：${error.message}`;
+            }
+        }
+
+        // 获取会话列表
+        async function listSessions() {
+            const resultDiv = document.getElementById('sessionResult');
+            const select = document.getElementById('sessionSelect');
+            
+            if (!currentToken) {
+                resultDiv.style.display = 'block';
+                resultDiv.className = 'result error';
+                resultDiv.textContent = '请先登录';
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/sessions', {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    // 更新选择器
+                    select.innerHTML = '<option value="">请选择会话</option>';
+                    data.data.forEach(session => {
+                        const option = document.createElement('option');
+                        option.value = session.id;
+                        option.textContent = `${session.title} (${new Date(session.created_at).toLocaleString()})`;
+                        if (session.id === currentSessionId) {
+                            option.selected = true;
+                        }
+                        select.appendChild(option);
+                    });
+
+                    resultDiv.style.display = 'block';
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `获取到 ${data.data.length} 个会话`;
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `获取会话失败：${data.message || '未知错误'}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `获取会话请求失败：${error.message}`;
+            }
+        }
+
+        // 发送消息
+        async function sendMessage() {
+            const messageInput = document.getElementById('messageInput');
+            const chatMessages = document.getElementById('chatMessages');
+            const sendBtn = document.getElementById('sendBtn');
+            const resultDiv = document.getElementById('chatResult');
+            
+            const selectedSessionId = document.getElementById('sessionSelect').value || currentSessionId;
+            const message = messageInput.value.trim();
+            
+            if (!currentToken) {
+                resultDiv.style.display = 'block';
+                resultDiv.className = 'result error';
+                resultDiv.textContent = '请先登录';
+                return;
+            }
+            
+            if (!selectedSessionId) {
+                resultDiv.style.display = 'block';
+                resultDiv.className = 'result error';
+                resultDiv.textContent = '请先选择或创建会话';
+                return;
+            }
+            
+            if (!message) {
+                resultDiv.style.display = 'block';
+                resultDiv.className = 'result error';
+                resultDiv.textContent = '请输入消息内容';
+                return;
+            }
+
+            // 显示用户消息
+            const userMessage = document.createElement('div');
+            userMessage.className = 'message user';
+            userMessage.textContent = message;
+            chatMessages.appendChild(userMessage);
+
+            // 显示加载状态
+            const loadingMessage = document.createElement('div');
+            loadingMessage.className = 'message loading';
+            loadingMessage.textContent = '正在思考中...';
+            chatMessages.appendChild(loadingMessage);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+
+            // 禁用发送按钮
+            sendBtn.disabled = true;
+            sendBtn.textContent = '发送中...';
+            
+            // 清空输入框
+            messageInput.value = '';
+
+            try {
+                const response = await fetch('/api/chat/stream', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${currentToken}`
+                    },
+                    body: JSON.stringify({
+                        session_id: selectedSessionId,
+                        query: message
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                // 移除加载消息
+                chatMessages.removeChild(loadingMessage);
+
+                // 创建AI回复消息
+                const aiMessage = document.createElement('div');
+                aiMessage.className = 'message assistant';
+                aiMessage.textContent = '';
+                chatMessages.appendChild(aiMessage);
+
+                // 处理流式响应
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let fullContent = '';
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split('\n');
+
+                    for (const line of lines) {
+                        if (line.startsWith('data: ')) {
+                            const jsonData = line.substring(6).trim();
+                            
+                            if (jsonData) {
+                                try {
+                                    const data = JSON.parse(jsonData);
+                                    
+                                    if (data.content) {
+                                        fullContent += data.content;
+                                        aiMessage.textContent = fullContent;
+                                        chatMessages.scrollTop = chatMessages.scrollHeight;
+                                    }
+
+                                    if (data.finished) {
+                                        resultDiv.style.display = 'block';
+                                        resultDiv.className = 'result success';
+                                        resultDiv.textContent = '消息发送成功！';
+                                        break;
+                                    }
+
+                                    if (data.error) {
+                                        throw new Error(data.error);
+                                    }
+                                } catch (parseError) {
+                                    console.warn('解析SSE数据失败:', jsonData, parseError);
+                                }
+                            }
+                        }
+                    }
+                }
+
+            } catch (error) {
+                // 移除加载消息
+                if (loadingMessage.parentNode) {
+                    chatMessages.removeChild(loadingMessage);
+                }
+                
+                resultDiv.style.display = 'block';
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `发送消息失败：${error.message}`;
+                
+                // 显示错误消息
+                const errorMessage = document.createElement('div');
+                errorMessage.className = 'message error';
+                errorMessage.textContent = `错误：${error.message}`;
+                chatMessages.appendChild(errorMessage);
+            } finally {
+                // 恢复发送按钮
+                sendBtn.disabled = false;
+                sendBtn.textContent = '发送消息';
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+            }
+        }
+
+        // 清空聊天
+        function clearChat() {
+            const chatMessages = document.getElementById('chatMessages');
+            chatMessages.innerHTML = '<div class="message info">聊天消息将显示在这里...</div>';
+        }
+
+        // 加载消息历史
+        async function loadMessageHistory() {
+            const resultDiv = document.getElementById('historyResult');
+            const selectedSessionId = document.getElementById('sessionSelect').value || currentSessionId;
+            
+            if (!currentToken) {
+                resultDiv.style.display = 'block';
+                resultDiv.className = 'result error';
+                resultDiv.textContent = '请先登录';
+                return;
+            }
+            
+            if (!selectedSessionId) {
+                resultDiv.style.display = 'block';
+                resultDiv.className = 'result error';
+                resultDiv.textContent = '请先选择会话';
+                return;
+            }
+
+            resultDiv.style.display = 'block';
+            resultDiv.className = 'result info';
+            resultDiv.textContent = '加载消息历史中...';
+
+            try {
+                const response = await fetch(`/api/messages?session_id=${selectedSessionId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${currentToken}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (response.ok && data.success) {
+                    resultDiv.className = 'result success';
+                    resultDiv.textContent = `消息历史加载成功！共 ${data.data.history.length} 条消息\n\n${JSON.stringify(data.data.history, null, 2)}`;
+                    
+                    // 在聊天区域显示历史消息
+                    const chatMessages = document.getElementById('chatMessages');
+                    chatMessages.innerHTML = '';
+                    
+                    data.data.history.forEach(msg => {
+                        const messageDiv = document.createElement('div');
+                        messageDiv.className = `message ${msg.role}`;
+                        messageDiv.textContent = msg.content;
+                        chatMessages.appendChild(messageDiv);
+                    });
+                    
+                    if (data.data.history.length === 0) {
+                        chatMessages.innerHTML = '<div class="message info">该会话暂无消息历史</div>';
+                    }
+                } else {
+                    resultDiv.className = 'result error';
+                    resultDiv.textContent = `加载消息历史失败：${data.message || '未知错误'}`;
+                }
+            } catch (error) {
+                resultDiv.className = 'result error';
+                resultDiv.textContent = `加载消息历史请求失败：${error.message}`;
+            }
+        }
+
+        // 会话选择变化
+        document.getElementById('sessionSelect').addEventListener('change', function() {
+            currentSessionId = this.value;
+            if (currentSessionId) {
+                loadMessageHistory();
+            }
+        });
+
+        // 页面加载时检查认证状态
+        window.addEventListener('load', function() {
+            checkAuthStatus();
+        });
+
+        // 回车发送消息
+        document.getElementById('messageInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>

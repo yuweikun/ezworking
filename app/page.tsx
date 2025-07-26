@@ -289,6 +289,9 @@ const Independent: React.FC = () => {
     switching: false,
   });
 
+  // 消息存储状态
+  const [isStoringMessages, setIsStoringMessages] = useState(false);
+
   // 网络状态
   const [isOnline, setIsOnline] = useState(true);
 
@@ -360,72 +363,321 @@ const Independent: React.FC = () => {
     syncConversationState,
   ]);
 
-  // 当切换会话时，同步目标会话的状态
-  useEffect(() => {
-    if (activeConversationId && isOnline && isAuthenticated && user?.id) {
-      // 延迟同步，避免频繁切换时的性能问题
-      const syncTimeout = setTimeout(() => {
-        syncConversationState(activeConversationId).catch((error) => {
-          console.warn("切换会话时同步失败:", error);
-        });
-      }, 1000); // 1秒延迟
+  // loadSessionMessages和相关useEffect将在useXChat之后定义
 
-      return () => {
-        clearTimeout(syncTimeout);
-      };
+  // 单条消息存储到数据库的辅助函数
+  const storeMessage = async (
+    sessionId: string,
+    role: "user" | "assistant",
+    content: string,
+    workflowStage?: any
+  ) => {
+    if (!isAuthenticated || !user?.id) {
+      console.warn("用户未认证，跳过消息存储");
+      return false;
     }
-  }, [
-    activeConversationId,
-    isOnline,
-    isAuthenticated,
-    user?.id,
-    syncConversationState,
-  ]);
 
-  const requestHandler = async ({ message }, { onUpdate, onSuccess }) => {
     try {
-      // Initial loading state
-      onUpdate({ content: "Thinking...", role: "assistant" });
-      const token = localStorage.getItem("authToken");
+      const token = localStorage.getItem("auth_token");
+      if (!token) {
+        console.warn("认证token不存在，跳过消息存储");
+        return false;
+      }
 
-      const eventSource = new EventSource(
-        `/api/ai/stream?query=${encodeURIComponent(
-          message.content
-        )}&sessionId=162756cb-0b37-499b-8999-7abebc871f91`
+      const response = await fetch("/api/messages/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          role: role,
+          content: content.trim(),
+          workflow_stage: workflowStage,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          console.log(`消息存储成功: ${role} - ${data.data.id}`);
+          return true;
+        } else {
+          console.warn("消息存储失败:", data.message);
+        }
+      } else {
+        console.warn("消息存储请求失败:", response.status, response.statusText);
+      }
+    } catch (error) {
+      console.warn("消息存储错误:", error);
+    }
+
+    return false;
+  };
+
+  const requestHandler = async (
+    { message }: { message: { content: string; role: string } },
+    {
+      onUpdate,
+      onSuccess,
+      onError,
+      onStream,
+    }: {
+      onUpdate: (chunk: { content: string; role: string }) => void;
+      onSuccess: (chunks: { content: string; role: string }[]) => void;
+      onError: (error: Error) => void;
+      onStream?: (abortController: AbortController) => void;
+    }
+  ) => {
+    // 直接使用当前活跃会话ID
+    const currentSessionId = activeConversationId;
+    
+    try {
+      // 检查是否有活跃会话
+      if (!currentSessionId) {
+        onError(new Error("请先创建或选择一个会话"));
+        return;
+      }
+
+      // 检查用户是否已登录
+      if (!isAuthenticated || !user?.id) {
+        onError(new Error("请先登录"));
+        return;
+      }
+
+      // 步骤1: 用户消息气泡已在onSubmit中立即渲染
+      
+      // 步骤2: 严格等待用户消息上传到数据库完成
+      setIsStoringMessages(true);
+      onUpdate({ content: "💾 正在保存您的消息...", role: "assistant" });
+      
+      console.log("开始上传用户消息到数据库...");
+      const userStorageSuccess = await storeMessage(
+        currentSessionId,
+        "user",
+        message.content,
+        { stage: "user_input", timestamp: Date.now() }
       );
 
-      let fullContent = "";
+      if (!userStorageSuccess) {
+        setIsStoringMessages(false);
+        onError(new Error("用户消息保存失败，请重试"));
+        return;
+      }
+      
+      console.log("用户消息上传完成，开始AI响应...");
 
-      eventSource.onmessage = (event) => {
+      // 步骤3: 用户消息保存成功后，AI才开始响应
+      onUpdate({ content: "正在思考中...", role: "assistant" });
+
+      const abortController = new AbortController();
+      if (onStream) {
+        onStream(abortController);
+      }
+
+      // 获取认证token
+      const token = localStorage.getItem("auth_token");
+      if (!token) {
+        setIsStoringMessages(false);
+        onError(new Error("认证token不存在，请重新登录"));
+        return;
+      }
+
+      // 步骤4: 调用AI流式API
+      const response = await fetch("/api/chat/stream", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          session_id: currentSessionId,
+          query: message.content,
+        }),
+        signal: abortController.signal,
+      });
+
+      if (!response.ok) {
+        setIsStoringMessages(false);
+        const errorText = await response.text();
+        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+
         try {
-          const data = JSON.parse(event.data);
-          console.log("Received SSE data:", data);
-          if (data.content) {
-            fullContent += data.content;
-            onUpdate({
-              content: fullContent,
-              role: "assistant",
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || errorMessage;
+        } catch {
+          // 如果不是JSON，使用默认错误消息
+        }
+
+        onError(new Error(errorMessage));
+        return;
+      }
+
+      // 步骤5: 处理AI流式响应（立即渲染AI气泡）
+      const reader = response.body?.getReader();
+      if (!reader) {
+        setIsStoringMessages(false);
+        onError(new Error("无法读取响应流"));
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let fullContent = "";
+      let finalWorkflowState = null;
+      const chunks: { content: string; role: string }[] = [];
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+
+          if (done) {
+            break;
+          }
+
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split("\n");
+
+          for (const line of lines) {
+            if (line.startsWith("data: ")) {
+              const jsonData = line.substring(6).trim();
+
+              if (jsonData) {
+                try {
+                  const data = JSON.parse(jsonData);
+                  console.log("Received SSE data:", data);
+
+                  if (data.content) {
+                    fullContent += data.content;
+                    const chunkData = {
+                      content: fullContent,
+                      role: "assistant" as const,
+                    };
+                    chunks.push(chunkData);
+                    // 立即渲染AI响应内容
+                    onUpdate(chunkData);
+                  }
+
+                  if (data.workflowState) {
+                    finalWorkflowState = data.workflowState;
+                  }
+
+                  if (data.finished) {
+                    console.log("AI响应完成，开始上传AI消息到数据库...");
+                    
+                    // 步骤6: AI响应完成后，严格等待AI消息上传到数据库
+                    onUpdate({ 
+                      content: fullContent + "\n\n💾 正在保存AI回复...", 
+                      role: "assistant" 
+                    });
+
+                    const aiStorageSuccess = await storeMessage(
+                      currentSessionId,
+                      "assistant",
+                      fullContent,
+                      finalWorkflowState || { stage: "ai_response", timestamp: Date.now() }
+                    );
+
+                    if (aiStorageSuccess) {
+                      console.log("AI消息上传完成，用户现在可以继续聊天");
+                      // 步骤7: AI消息保存成功，移除存储提示
+                      onUpdate({ 
+                        content: fullContent, 
+                        role: "assistant" 
+                      });
+                    } else {
+                      console.warn("AI消息保存失败");
+                      // AI消息保存失败，但不阻止用户继续聊天
+                      onUpdate({ 
+                        content: fullContent + "\n\n⚠️ AI回复保存失败", 
+                        role: "assistant" 
+                      });
+                    }
+
+                    // 步骤8: 严格等待所有存储操作完成后，才重置状态允许用户继续聊天
+                    setIsStoringMessages(false);
+                    
+                    // 给用户一点时间看到最终状态，然后完成对话
+                    setTimeout(() => {
+                      onSuccess(chunks);
+                    }, 300);
+                    
+                    return;
+                  }
+
+                  if (data.error) {
+                    setIsStoringMessages(false);
+                    onError(new Error("流式响应中出现错误"));
+                    return;
+                  }
+                } catch (parseError) {
+                  console.warn(
+                    "Failed to parse SSE data:",
+                    jsonData,
+                    parseError
+                  );
+                  // 继续处理其他数据块，不中断整个流程
+                }
+              }
+            }
+          }
+        }
+
+        // 如果流结束但没有收到finished标志，仍然严格执行存储流程
+        if (fullContent.trim() && chunks.length > 0) {
+          console.log("流结束但未收到finished标志，执行存储流程...");
+          
+          onUpdate({ 
+            content: fullContent + "\n\n💾 正在保存AI回复...", 
+            role: "assistant" 
+          });
+
+          const aiStorageSuccess = await storeMessage(
+            currentSessionId,
+            "assistant",
+            fullContent,
+            finalWorkflowState || { stage: "ai_response", timestamp: Date.now() }
+          );
+
+          if (aiStorageSuccess) {
+            console.log("AI消息存储完成");
+            onUpdate({ 
+              content: fullContent, 
+              role: "assistant" 
+            });
+          } else {
+            console.warn("AI消息存储失败");
+            onUpdate({ 
+              content: fullContent + "\n\n⚠️ AI回复保存失败", 
+              role: "assistant" 
             });
           }
-        } catch (e) {
-          console.error("Failed to parse SSE data:", e);
-        }
-      };
 
-      eventSource.onerror = (error) => {
-        console.error("SSE error:", error);
-        eventSource.close();
-        onSuccess({
-          content: fullContent,
-          role: "assistant",
-        });
-      };
+          // 严格等待存储完成后才允许用户继续
+          setIsStoringMessages(false);
+          
+          setTimeout(() => {
+            onSuccess(chunks);
+          }, 300);
+        } else {
+          setIsStoringMessages(false);
+          onError(new Error("未收到任何响应内容"));
+        }
+      } finally {
+        reader.releaseLock();
+      }
     } catch (error) {
-      onUpdate({
-        content: `Error: ${error.message}`,
-        role: "assistant",
-        finished: true,
-      });
+      setIsStoringMessages(false);
+      const errorMessage =
+        error instanceof Error ? error.message : "An unknown error occurred";
+
+      // 检查是否是用户主动取消的请求
+      if (error instanceof Error && error.name === "AbortError") {
+        console.log("Request was aborted by user");
+        return; // 不显示错误，因为这是用户主动取消
+      }
+
+      onError(new Error(errorMessage));
     }
   };
 
@@ -504,6 +756,79 @@ const Independent: React.FC = () => {
     // },
   });
 
+  // 从数据库加载会话消息历史
+  const loadSessionMessages = useCallback(
+    async (sessionId: string) => {
+      if (!isAuthenticated || !user?.id) return;
+
+      try {
+        const token = localStorage.getItem("auth_token");
+        if (!token) return;
+
+        const response = await fetch(`/api/messages?session_id=${sessionId}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data.history) {
+            // 将数据库消息转换为前端消息格式
+            const formattedMessages = data.data.history.map((msg: any) => ({
+              message: {
+                role: msg.role,
+                content: msg.content,
+              },
+              status: "success",
+            }));
+
+            // 更新消息历史
+            setMessageHistory((prev) => ({
+              ...prev,
+              [sessionId]: formattedMessages,
+            }));
+
+            // 如果这是当前活跃会话，更新显示的消息
+            if (sessionId === activeConversationId) {
+              setMessages(formattedMessages);
+            }
+          }
+        }
+      } catch (error) {
+        console.warn("加载会话消息失败:", error);
+      }
+    },
+    [isAuthenticated, user?.id, activeConversationId, setMessages]
+  );
+
+  // 当切换会话时，加载消息历史并同步状态
+  useEffect(() => {
+    if (!activeConversationId || !isOnline || !isAuthenticated || !user?.id) {
+      return;
+    }
+
+    // 检查是否有缓存的消息历史
+    if (messageHistory[activeConversationId]) {
+      // 如果有缓存，直接使用
+      setMessages(messageHistory[activeConversationId]);
+    } else {
+      // 如果没有缓存，从数据库加载
+      loadSessionMessages(activeConversationId);
+    }
+
+    // 延迟同步，避免频繁切换时的性能问题
+    const syncTimeout = setTimeout(() => {
+      syncConversationState(activeConversationId).catch((error) => {
+        console.warn("切换会话时同步失败:", error);
+      });
+    }, 1000); // 1秒延迟
+
+    return () => {
+      clearTimeout(syncTimeout);
+    };
+  }, [activeConversationId, isOnline, isAuthenticated, user?.id]); // 只依赖基本状态，避免循环
+
   // ==================== 事件处理 ====================
   // 提交消息的处理函数
   const onSubmit = (val: string) => {
@@ -511,25 +836,32 @@ const Independent: React.FC = () => {
 
     // 如果正在请求中，显示错误提示
     if (loading) {
-      message.error(
-        "Request is in progress, please wait for the request to complete."
-      ); // 请求进行中，请等待请求完成
+      message.error("正在处理中，请等待当前请求完成");
       return;
     }
 
-    // 如果有活跃会话，更新会话的活动状态
-    if (activeConversationId) {
-      // 立即更新会话时间戳，表示用户正在此会话中活动
-      onMessageAdded(activeConversationId, val, "user", {
-        skipSync: false, // 允许同步以获取准确的消息数量
-        batchUpdate: false, // 立即更新，因为这是用户主动操作
-      });
+    // 如果正在存储消息，禁止新的输入
+    if (isStoringMessages) {
+      message.error("正在保存对话，请稍候...");
+      return;
     }
 
-    // 发送请求
+    // 检查是否有活跃会话
+    if (!activeConversationId) {
+      message.error("请先创建或选择一个会话");
+      return;
+    }
+
+    // 检查用户是否已登录
+    if (!isAuthenticated || !user?.id) {
+      message.error("请先登录");
+      return;
+    }
+
+    // 发送请求 - requestHandler会处理聊天和批量存储
     onRequest({
       stream: true, // 启用流式响应
-      message: { role: "user", content: val }, // 用户消息
+      message: { role: "user", content: val }, // 用户消息（不包含sessionId避免DOM警告）
     });
   };
 
@@ -563,12 +895,21 @@ const Independent: React.FC = () => {
 
           try {
             const title = generateDefaultTitle(conversations.length);
-            await createConversation(title, {
+            const newConversation = await createConversation(title, {
               showSuccess: true,
               showError: true,
               autoSelect: true,
             });
-            setMessages([]); // 清空消息列表
+
+            // 清空消息列表和消息历史缓存
+            setMessages([]);
+            if (newConversation) {
+              setMessageHistory((prev) => ({
+                ...prev,
+                [activeConversationId || ""]: [],
+              }));
+            }
+
             clearError(); // 清除任何现有错误
           } catch (error: any) {
             console.error("创建会话失败:", error);
@@ -832,16 +1173,24 @@ const Independent: React.FC = () => {
 
                 try {
                   abortController.current?.abort(); // 取消当前请求
-                  // 中止执行会触发异步的 requestFallback，可能导致时序问题
-                  // 在未来版本中，将添加 sessionId 功能来解决这个问题
-                  setTimeout(() => {
-                    setActiveConversation(val); // 切换会话
-                    setMessages(messageHistory?.[val] || []); // 加载对应会话的消息历史
-                    setOperationLoading((prev) => ({
-                      ...prev,
-                      switching: false,
-                    }));
-                  }, 100);
+
+                  // 切换会话
+                  setActiveConversation(val);
+
+                  // 检查是否有缓存的消息历史
+                  if (messageHistory[val]) {
+                    setMessages(messageHistory[val]);
+                  } else {
+                    // 如果没有缓存，清空消息并从数据库加载
+                    setMessages([]);
+                    // 加载消息历史
+                    await loadSessionMessages(val);
+                  }
+
+                  setOperationLoading((prev) => ({
+                    ...prev,
+                    switching: false,
+                  }));
                 } catch (error) {
                   console.error("切换会话失败:", error);
                   setOperationLoading((prev) => ({
@@ -931,25 +1280,43 @@ const Independent: React.FC = () => {
       {messages?.length ? (
         /* 🌟 聊天气泡列表 */
         <Bubble.List
-          items={messages?.map((i) => ({
-            ...i.message,
-            messageRender: () =>
-              CustomMessageRenderer({
-                id: `msg-${Date.now()}-${Math.random()}`, // 生成唯一ID
-                role: i.message.role as "assistant" | "user" | "system",
-                content: i.message.content,
-                timestamp: Date.now(), // 或者从消息中获取实际时间戳
-              }), // 传递符合 Message 类型的对象
-            classNames: {
-              // 加载中的消息添加特殊样式
-              content: i.status === "loading" ? styles.loadingMessage : "",
-            },
-            // 加载中显示打字效果
-            typing:
-              i.status === "loading"
-                ? { step: 5, interval: 20, suffix: <>💗</> }
-                : false,
-          }))}
+          items={messages?.map((i) => {
+            // Handle different message formats
+            let messageData: any = {};
+            let role: "assistant" | "user" | "system" = "user";
+            let content = "";
+
+            if (i.message && typeof i.message === "object") {
+              messageData = i.message;
+              role = (i.message as any).role || "user";
+              content = (i.message as any).content || "";
+            } else if (typeof i.message === "string") {
+              content = i.message;
+              role = "user"; // Default role for string messages
+            }
+
+            return {
+              ...messageData,
+              role,
+              content,
+              messageRender: () =>
+                CustomMessageRenderer({
+                  id: `msg-${Date.now()}-${Math.random()}`, // 生成唯一ID
+                  role,
+                  content,
+                  timestamp: Date.now(), // 或者从消息中获取实际时间戳
+                }), // 传递符合 Message 类型的对象
+              classNames: {
+                // 加载中的消息添加特殊样式
+                content: i.status === "loading" ? styles.loadingMessage : "",
+              },
+              // 加载中显示打字效果
+              typing:
+                i.status === "loading"
+                  ? { step: 5, interval: 20, suffix: <>💗</> }
+                  : false,
+            };
+          })}
           style={{
             height: "100%",
             paddingInline: "calc(calc(100% - 700px) /2)",
@@ -1096,9 +1463,11 @@ const Independent: React.FC = () => {
             type="text"
             icon={<PaperClipOutlined style={{ fontSize: 18 }} />}
             onClick={() => setAttachmentsOpen(!attachmentsOpen)} // 切换附件面板
+            disabled={isStoringMessages} // 存储期间禁用附件按钮
           />
         }
-        loading={loading} // 加载状态
+        loading={loading || isStoringMessages} // 加载状态（包含存储状态）
+        disabled={isStoringMessages} // 存储期间禁用输入
         className={styles.sender}
         allowSpeech={false} // 禁用语音输入以避免水合错误
         actions={(_, info) => {
@@ -1106,7 +1475,7 @@ const Independent: React.FC = () => {
           const { SendButton, LoadingButton } = info.components;
           return (
             <Flex gap={4}>
-              {loading ? (
+              {loading || isStoringMessages ? (
                 <LoadingButton type="default" />
               ) : (
                 <SendButton type="primary" />
@@ -1115,12 +1484,12 @@ const Independent: React.FC = () => {
             </Flex>
           );
         }}
-        placeholder=" " // 输入框占位符
+        placeholder={isStoringMessages ? "正在保存对话..." : " "} // 动态占位符
       />
     </>
   );
 
-  // 监听消息变化，保存到历史记录并更新会话状态
+  // 监听消息变化，保存到历史记录
   useEffect(() => {
     // 消息历史记录模拟
     if (messages?.length && activeConversationId) {
@@ -1131,24 +1500,30 @@ const Independent: React.FC = () => {
 
       // 检查是否有新的助手消息完成
       const lastMessage = messages[messages.length - 1];
-      if (
-        lastMessage &&
-        lastMessage.message.role === "assistant" &&
-        lastMessage.status !== "loading"
-      ) {
-        // 助手消息完成，更新会话状态
-        onMessageAdded(
-          activeConversationId,
-          lastMessage.message.content,
-          "assistant",
-          {
-            skipSync: false,
-            batchUpdate: false, // 立即更新以反映最新状态
-          }
-        );
+      if (lastMessage && lastMessage.status !== "loading") {
+        // 提取消息内容和角色
+        let content = "";
+        let role = "user";
+
+        if (lastMessage.message && typeof lastMessage.message === "object") {
+          content = (lastMessage.message as any).content || "";
+          role = (lastMessage.message as any).role || "user";
+        } else if (typeof lastMessage.message === "string") {
+          content = lastMessage.message;
+          role = "user"; // Default role for string messages
+        }
+
+        // 当AI消息完成时，记录日志但不重新加载（避免重复请求）
+        if (role === "assistant" && content.trim()) {
+          console.log("AI消息完成，已自动保存到数据库");
+          // 注释掉重新加载，因为消息已经在前端显示，不需要重复从数据库加载
+          // setTimeout(() => {
+          //   loadSessionMessages(activeConversationId);
+          // }, 500);
+        }
       }
     }
-  }, [messages, activeConversationId, onMessageAdded]);
+  }, [messages, activeConversationId, loadSessionMessages]);
 
   // 显示会话错误信息（仅在操作失败时显示toast，列表错误在UI中显示）
   useEffect(() => {

@@ -71,7 +71,7 @@ async function getMessages(request: NextRequest, user: AuthUser) {
       const supabase = createServerSupabaseClient();
       const { data, error } = await supabase
         .from("chat_messages")
-        .select("id, session_id, role, content, work_stage, timestamp")
+        .select("id, session_id, role, content, workflow_stage, timestamp")
         .eq("session_id", session_id)
         .order("timestamp", { ascending: true })
         .range((page - 1) * limit, page * limit - 1);
@@ -89,7 +89,7 @@ async function getMessages(request: NextRequest, user: AuthUser) {
     const history = (messages || []).map((msg) => ({
       role: msg.role as "user" | "ai",
       content: msg.content,
-      workflow_stage: msg.work_stage || undefined,
+      workflow_stage: msg.workflow_stage || undefined,
     }));
 
     const response: MessageHistory = {
@@ -160,9 +160,9 @@ async function createMessage(request: NextRequest, user: AuthUser) {
         session_id,
         role,
         content,
-        work_stage: work_stage || null,
+        workflow_stage: work_stage || null,
       })
-      .select("id, session_id, role, content, work_stage, timestamp")
+      .select("id, session_id, role, content, workflow_stage, timestamp")
       .single();
 
     if (messageError) {
